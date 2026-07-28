@@ -48,12 +48,16 @@ const initialShopping = [
   { id: 5, title: "Dishwasher tablets", amount: "1", done: false },
 ];
 
-export default function Dashboard({ user }: { user: { username: string; displayName: string } }) {
+type Group = { id: string; name: string; role: "owner" | "admin" | "member"; memberCount: number };
+
+export default function Dashboard({ user, groups }: { user: { username: string; displayName: string }; groups: Group[] }) {
   const [active, setActive] = useState("Overview");
   const [menuOpen, setMenuOpen] = useState(false);
   const [tasks, setTasks] = useState(initialTasks);
   const [shopping, setShopping] = useState(initialShopping);
   const [toast, setToast] = useState("");
+  const [activeGroup, setActiveGroup] = useState(groups[0]);
+  const [invite, setInvite] = useState("");
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -69,6 +73,13 @@ export default function Dashboard({ user }: { user: { username: string; displayN
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.reload();
+  };
+
+  const createInvite = async () => {
+    const response = await fetch(`/api/groups/${activeGroup.id}/invites`, { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) return notify(data.error || "Invite could not be created");
+    setInvite(data.code);
   };
 
   return (
@@ -103,13 +114,13 @@ export default function Dashboard({ user }: { user: { username: string; displayN
         <section className="workspace-card">
           <div className="workspace-title">
             <div className="workspace-icon"><Home /></div>
-            <div><strong>Our Home</strong><span>4 members</span></div>
+            <div><strong>{activeGroup.name}</strong><span>{activeGroup.memberCount} {activeGroup.memberCount === 1 ? "member" : "members"}</span></div>
             <ChevronDown />
           </div>
           <div className="avatar-stack" aria-label="Group members">
             <i>SF</i><i>AM</i><i>JD</i><i>+1</i>
           </div>
-          <button className="invite-button" onClick={() => notify("Invite flow comes in Stage 3")}>
+          <button className="invite-button" onClick={createInvite}>
             <UserPlus /> Invite member
           </button>
         </section>
@@ -140,7 +151,9 @@ export default function Dashboard({ user }: { user: { username: string; displayN
               <p className="eyebrow"><Sparkles /> YOUR SHARED SPACE</p>
               <h1>Good evening, {user.displayName}</h1>
               <div className="group-line">
-                <button className="group-select"><Home /> Our Home <ChevronDown /></button>
+                <button className="group-select" onClick={() => groups.length > 1 && setActiveGroup(groups[(groups.indexOf(activeGroup) + 1) % groups.length])}>
+                  <Home /> {activeGroup.name} <ChevronDown />
+                </button>
                 <div className="avatar-stack hero-avatars"><i>{user.displayName.slice(0, 2).toUpperCase()}</i><i>AM</i><i>JD</i><i>+1</i></div>
               </div>
             </div>
@@ -217,6 +230,20 @@ export default function Dashboard({ user }: { user: { username: string; displayN
       </nav>
 
       {toast ? <div className="toast"><CheckCircle2 /> {toast}</div> : null}
+      {invite ? (
+        <div className="invite-modal-backdrop" onClick={() => setInvite("")}>
+          <section className="invite-modal" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setInvite("")}><X /></button>
+            <div className="success-icon"><UserPlus /></div>
+            <p className="auth-kicker">PRIVATE INVITATION</p>
+            <h2>Invite someone to {activeGroup.name}</h2>
+            <p>Share this code. It expires automatically in 7 days.</p>
+            <button className="recovery-code" onClick={() => { navigator.clipboard.writeText(invite); notify("Invite code copied"); }}>
+              {invite}<span>Click to copy</span>
+            </button>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

@@ -1,9 +1,9 @@
-# WeDo — Stage 2/6
+# WeDo — Stage 3/6
 
 Aplicație PWA colaborativă pentru grupuri, construită cu Next.js, TypeScript,
-Tailwind CSS și PostgreSQL. Stage 2 adaugă conturi reale și sesiuni securizate.
+Tailwind CSS și PostgreSQL. Stage 3 adaugă grupuri private și invitații.
 
-## Ce funcționează în Stage 2
+## Ce funcționează în Stage 3
 
 - design responsive pentru PC și mobil;
 - navigație desktop și mobilă;
@@ -20,6 +20,14 @@ Tailwind CSS și PostgreSQL. Stage 2 adaugă conturi reale și sesiuni securizat
 - resetarea parolei cu rotirea codului de recuperare;
 - logout și protejarea dashboardului;
 - creare automată a tabelului de utilizatori la prima înregistrare.
+- creare de grupuri private;
+- intrare într-un grup folosind un cod;
+- roluri Owner, Admin și Member;
+- coduri de invitație valabile 7 zile;
+- acces la grupuri permis numai membrilor;
+- listarea securizată a membrilor;
+- schimbarea grupului activ;
+- suport pentru mai multe grupuri per utilizator.
 
 ## Pornire locală
 
@@ -67,11 +75,11 @@ git push -u origin main
 
 ## Actualizarea proiectului pe GitHub
 
-1. Dezarhivează ZIP-ul Stage 2.
+1. Dezarhivează ZIP-ul Stage 3.
 2. Deschide repository-ul `wedo` pe GitHub.
 3. Șterge fișierele vechi sau înlocuiește-le cu toate fișierele din noul ZIP.
 4. Verifică să existe direct la rădăcină `app`, `lib`, `public` și `package.json`.
-5. Salvează cu mesajul `WeDo Stage 2`.
+5. Salvează cu mesajul `WeDo Stage 3`.
 
 Vercel va încerca automat un nou deployment. Acesta va fi complet funcțional
 după configurarea bazei de date și a secretului descrise mai jos.
@@ -87,8 +95,8 @@ după configurarea bazei de date și a secretului descrise mai jos.
 7. Finalizează instalarea.
 8. Verifică în **Settings → Environment Variables** că există `DATABASE_URL`.
 
-Nu trebuie să creezi manual tabele. WeDo creează automat tabelul `users` la
-prima înregistrare.
+Nu trebuie să creezi manual tabele. WeDo creează automat tabelele necesare
+pentru utilizatori, grupuri, membri și invitații.
 
 ## Configurarea secretului pentru autentificare
 
