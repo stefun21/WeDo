@@ -1,10 +1,9 @@
-# WeDo — Stage 1/6
+# WeDo — Stage 2/6
 
-Aplicație PWA colaborativă pentru grupuri, construită cu Next.js, TypeScript și
-Tailwind CSS. Această etapă conține interfața dark premium, dashboardul
-responsive, navigația, PWA-ul de bază și interacțiuni demonstrative.
+Aplicație PWA colaborativă pentru grupuri, construită cu Next.js, TypeScript,
+Tailwind CSS și PostgreSQL. Stage 2 adaugă conturi reale și sesiuni securizate.
 
-## Ce funcționează în Stage 1
+## Ce funcționează în Stage 2
 
 - design responsive pentru PC și mobil;
 - navigație desktop și mobilă;
@@ -13,9 +12,14 @@ responsive, navigația, PWA-ul de bază și interacțiuni demonstrative.
 - manifest PWA, service worker și iconițe;
 - cache offline de bază;
 - fundația pentru notificări Web Push.
-
-Datele afișate sunt momentan demonstrative. Conturile și baza de date vor fi
-adăugate în Stage 2.
+- creare cont fără email sau număr de telefon;
+- autentificare prin username și parolă;
+- parolă criptată cu bcrypt;
+- sesiune securizată într-un cookie HTTP-only;
+- cod unic de recuperare afișat o singură dată;
+- resetarea parolei cu rotirea codului de recuperare;
+- logout și protejarea dashboardului;
+- creare automată a tabelului de utilizatori la prima înregistrare.
 
 ## Pornire locală
 
@@ -61,14 +65,62 @@ git remote add origin https://github.com/USERNAME/wedo.git
 git push -u origin main
 ```
 
-## Publicare gratuită pe Vercel
+## Actualizarea proiectului pe GitHub
+
+1. Dezarhivează ZIP-ul Stage 2.
+2. Deschide repository-ul `wedo` pe GitHub.
+3. Șterge fișierele vechi sau înlocuiește-le cu toate fișierele din noul ZIP.
+4. Verifică să existe direct la rădăcină `app`, `lib`, `public` și `package.json`.
+5. Salvează cu mesajul `WeDo Stage 2`.
+
+Vercel va încerca automat un nou deployment. Acesta va fi complet funcțional
+după configurarea bazei de date și a secretului descrise mai jos.
+
+## Configurarea bazei de date gratuite
+
+1. Deschide proiectul WeDo în Vercel.
+2. Intră în **Storage** și apasă **Create Database** sau **Browse Marketplace**.
+3. Alege **Neon Postgres**.
+4. Selectează planul **Free / $0** și opțiunea de creare a unui proiect nou.
+5. Conectează baza de date la proiectul Vercel `wedo`.
+6. Selectează mediile Production, Preview și Development dacă sunt afișate.
+7. Finalizează instalarea.
+8. Verifică în **Settings → Environment Variables** că există `DATABASE_URL`.
+
+Nu trebuie să creezi manual tabele. WeDo creează automat tabelul `users` la
+prima înregistrare.
+
+## Configurarea secretului pentru autentificare
+
+În **Settings → Environment Variables**, adaugă:
+
+```text
+Name: AUTH_SECRET
+Value: un-text-lung-si-aleatoriu-de-cel-putin-32-caractere
+```
+
+Poți folosi, de exemplu, o combinație aleatorie de 50–60 de litere, cifre și
+simboluri. Nu publica valoarea în GitHub.
+
+Selectează Production, Preview și Development, apoi salvează.
+
+## Redeploy după configurare
+
+1. Intră la **Deployments**.
+2. Deschide meniul ultimului deployment.
+3. Apasă **Redeploy**.
+4. Dezactivează folosirea cache-ului vechi dacă este afișată opțiunea.
+
+După redeploy, creează primul cont. Codul de recuperare trebuie salvat imediat.
+
+## Prima publicare gratuită pe Vercel
 
 1. Intră în Vercel folosind contul GitHub pe care îl ai deja.
 2. Apasă **Add New → Project**.
 3. Selectează repository-ul `wedo` și apasă **Import**.
 4. Vercel ar trebui să detecteze automat **Next.js**.
 5. Lasă **Root Directory** pe valoarea implicită.
-6. Nu adăuga Environment Variables în această etapă.
+6. Configurează `DATABASE_URL` și `AUTH_SECRET` conform instrucțiunilor.
 7. Apasă **Deploy**.
 
 La final vei primi o adresă gratuită de forma `wedo-....vercel.app`.
@@ -87,6 +139,5 @@ Screen și acordarea permisiunii.
 
 ## Costuri
 
-Stage 1 nu folosește servicii plătite, baze de date sau API-uri externe.
-GitHub și Vercel pot fi folosite pe planurile lor gratuite, în limitele
-acestora.
+Proiectul folosește planurile gratuite GitHub, Vercel și Neon. Nu necesită
+emailuri, SMS-uri, domeniu cumpărat sau servicii API plătite.
