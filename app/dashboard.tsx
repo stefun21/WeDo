@@ -11,7 +11,6 @@ import {
   LogOut,
   Menu,
   MessageCircle,
-  MoreHorizontal,
   Plus,
   Search,
   ShoppingCart,
@@ -298,7 +297,6 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const shoppingPageCount = Math.max(1, Math.ceil(filteredShopping.length / 4));
   const visibleTasks = filteredTasks.slice(Math.min(taskPage, taskPageCount - 1) * 4, Math.min(taskPage, taskPageCount - 1) * 4 + 4);
   const visibleShopping = filteredShopping.slice(Math.min(shoppingPage, shoppingPageCount - 1) * 4, Math.min(shoppingPage, shoppingPageCount - 1) * 4 + 4);
-  const latestMessage = messages.at(-1);
   const mentionMatch = chatDraft.match(/@([a-zA-Z0-9_-]*)$/);
   const mentionSuggestions = mentionMatch
     ? groupMembers.filter((member) => member.id !== user.id && member.username.toLowerCase().startsWith(mentionMatch[1].toLowerCase())).slice(0, 5)
@@ -398,18 +396,6 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             </div>
             <button className="primary-button" onClick={() => setQuickAdd(true)}>Add new <Plus /></button>
           </section>
-
-          {active === "Overview" ? <section className="overview-card">
-            <div className="overview-heading"><h2>Overview</h2><button><MoreHorizontal /></button></div>
-            <div className="metrics">
-              <Metric onOpen={() => navigate("Tasks")} icon={<CheckCircle2 />} color="mint" value={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} progress={tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : 0} />
-              <Metric onOpen={() => navigate("Shopping")} icon={<ShoppingCart />} color="lime" value={`${shopping.filter((item) => item.done).length} of ${shopping.length} bought`} progress={shopping.length ? Math.round(shopping.filter((item) => item.done).length / shopping.length * 100) : 0} showProgress={shopping.length > 0} />
-              <div className={`metric cyan latest-message metric-link ${latestMessage && latestMessage.userId !== user.id && unreadCount > 0 ? "unread" : "read"}`} role="button" tabIndex={0} onClick={() => navigate("Chat")} onKeyDown={(event) => event.key === "Enter" && navigate("Chat")}>
-                <div className="metric-icon"><MessageCircle /></div>
-                <div><strong>{latestMessage ? `${latestMessage.displayName}: ${latestMessage.body}` : "No messages yet"}</strong><small>{latestMessage ? new Date(latestMessage.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Start the conversation"}</small></div>
-              </div>
-            </div>
-          </section> : null}
 
           <section className={`card-grid ${active !== "Overview" ? "single-module" : ""}`}>
             {active === "Overview" || active === "Tasks" ? <article className="module-card" id="tasks">
@@ -606,10 +592,6 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
       ) : null}
     </main>
   );
-}
-
-function Metric({ icon, color, value, progress, showProgress = true, onOpen }: { icon: React.ReactNode; color: string; value: string; progress: number; showProgress?: boolean; onOpen?: () => void }) {
-  return <div className={`metric ${color} ${onOpen ? "metric-link" : ""}`} role={onOpen ? "button" : undefined} tabIndex={onOpen ? 0 : undefined} onClick={onOpen} onKeyDown={(event) => event.key === "Enter" && onOpen?.()}><div className="metric-icon">{icon}</div><div><strong>{value}</strong>{showProgress ? <div className="progress"><span style={{ width: `${progress}%` }} /></div> : null}</div></div>;
 }
 
 function CardHeader({ title, detail, onOpen }: { title: string; detail: string; onOpen: () => void }) {
