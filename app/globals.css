@@ -112,6 +112,10 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.08; letter-spa
 .chat-message strong { font-size: 13px; }.chat-message time { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 10px; }
 .chat-message time span { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); }
 .chat-message p { margin: 8px 0 0; color: #aab5c2; font-size: 12px; line-height: 1.65; }
+.live-chat-list { max-height: 274px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.chat-compose { margin-top: auto; padding-top: 14px; display: grid; grid-template-columns: 1fr 38px; gap: 8px; border-top: 1px solid rgba(38,51,67,.7); }
+.chat-compose input { min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; outline: 0; background: #0d1520; color: var(--text); font-size: 12px; }
+.chat-compose input:focus { border-color: var(--cyan); }.chat-compose button { width: 38px; height: 38px; border: 0; border-radius: 10px; background: var(--cyan); color: #071116; font-size: 20px; font-weight: 900; cursor: pointer; }.chat-compose button:disabled { opacity: .55; }
 
 .mobile-menu, .mobile-close, .bottom-nav, .backdrop { display: none; }
 .toast { position: fixed; z-index: 60; right: 24px; bottom: 24px; padding: 13px 17px; display: flex; align-items: center; gap: 9px; border: 1px solid rgba(110,242,176,.35); border-radius: 12px; background: #15251f; color: #dffff0; box-shadow: 0 12px 40px rgba(0,0,0,.35); font-size: 13px; animation: toast-in .2s ease-out; }

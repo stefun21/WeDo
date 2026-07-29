@@ -1,9 +1,9 @@
-# WeDo — Stage 4/6
+# WeDo — Stage 5/6
 
 Aplicație PWA colaborativă pentru grupuri, construită cu Next.js, TypeScript,
-Tailwind CSS și PostgreSQL. Stage 4 adaugă task-uri și cumpărături colaborative.
+Tailwind CSS și PostgreSQL. Stage 5 adaugă chat persistent și notificări Web Push.
 
-## Ce funcționează în Stage 4
+## Ce funcționează în Stage 5
 
 - design responsive pentru PC și mobil;
 - navigație desktop și mobilă;
@@ -36,6 +36,14 @@ Tailwind CSS și PostgreSQL. Stage 4 adaugă task-uri și cumpărături colabora
 - adăugare din butonul principal `Add new`;
 - reîncărcarea automată a datelor la schimbarea grupului;
 - stări goale pentru grupurile noi.
+- chat persistent separat pentru fiecare grup;
+- actualizare automată a conversației la 5 secunde;
+- mesaje păstrate integral în PostgreSQL;
+- maximum 2.000 de caractere per mesaj;
+- notificări Web Push pentru mesajele primite;
+- abonament separat pentru fiecare dispozitiv;
+- eliminarea automată a abonamentelor expirate;
+- suport Android, desktop și PWA instalat pe iPhone.
 
 ## Pornire locală
 
@@ -83,11 +91,33 @@ git push -u origin main
 
 ## Actualizarea proiectului pe GitHub
 
-1. Dezarhivează ZIP-ul Stage 4.
+1. Dezarhivează ZIP-ul Stage 5.
 2. Deschide repository-ul `wedo` pe GitHub.
 3. Șterge fișierele vechi sau înlocuiește-le cu toate fișierele din noul ZIP.
 4. Verifică să existe direct la rădăcină `app`, `lib`, `public` și `package.json`.
-5. Salvează cu mesajul `WeDo Stage 4`.
+5. Salvează cu mesajul `WeDo Stage 5`.
+
+## Activarea notificărilor Web Push
+
+După actualizarea GitHub, deschide un terminal în folderul proiectului și rulează:
+
+```bash
+npm install
+npm run generate-vapid
+```
+
+Comanda afișează două chei. Adaugă-le în Vercel → Settings → Environment Variables:
+
+```text
+NEXT_PUBLIC_VAPID_PUBLIC_KEY
+VAPID_PRIVATE_KEY
+```
+
+Selectează Production, Preview și Development, salvează și fă Redeploy fără
+cache. Nu publica cheia privată în GitHub.
+
+După deployment, fiecare utilizator apasă clopoțelul din dreapta sus și acceptă
+notificările. Pe iPhone, aplicația trebuie mai întâi instalată pe Home Screen.
 
 Vercel va încerca automat un nou deployment. Acesta va fi complet funcțional
 după configurarea bazei de date și a secretului descrise mai jos.

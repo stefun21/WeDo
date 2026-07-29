@@ -35,6 +35,7 @@ const navItems = [
 
 type Task = { id: string; title: string; done: boolean; person: string; when: string };
 type ShoppingItem = { id: string; title: string; amount: string; done: boolean };
+type Message = { id: string; body: string; createdAt: string; userId: string; displayName: string };
 
 type Group = { id: string; name: string; role: "owner" | "admin" | "member"; memberCount: number };
 
@@ -49,6 +50,8 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   const [quickAdd, setQuickAdd] = useState(false);
   const [editor, setEditor] = useState<"task" | "shopping" | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -80,6 +83,24 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   // Loading remote collaborative state is the synchronization purpose of this effect.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
+
+  const loadChat = useCallback(async () => {
+    const response = await fetch(`/api/groups/${activeGroup.id}/chat`, { cache: "no-store" });
+    const data = await response.json();
+    if (response.ok) {
+      setMessages(data.messages.map((message: { id: string; body: string; created_at: string; user_id: string; display_name: string }) => ({
+        id: message.id, body: message.body, createdAt: message.created_at,
+        userId: message.user_id, displayName: message.display_name,
+      })));
+    }
+  }, [activeGroup.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadChat();
+    const timer = window.setInterval(() => void loadChat(), 5000);
+    return () => window.clearInterval(timer);
+  }, [loadChat]);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -117,6 +138,37 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
     setEditor(null);
     notify(editor === "task" ? "Task added" : "Shopping item added");
     loadWorkspace();
+  };
+
+  const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const input = new FormData(form).get("message");
+    const message = String(input || "").trim();
+    if (!message || sendingMessage) return;
+    setSendingMessage(true);
+    const response = await fetch(`/api/groups/${activeGroup.id}/chat`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+    if (response.ok) { form.reset(); await loadChat(); }
+    else { const data = await response.json(); notify(data.error || "Message could not be sent"); }
+    setSendingMessage(false);
+  };
+
+  const enableNotifications = async () => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return notify("Push notifications are not supported here");
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!publicKey) return notify("Notification keys are not configured yet");
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return notify("Notification permission was not granted");
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+    }
+    const response = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(subscription) });
+    notify(response.ok ? "Notifications enabled" : "Notifications could not be enabled");
   };
 
   return (
@@ -173,8 +225,8 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             <input aria-label="Search WeDo" placeholder="Search WeDo..." />
             <kbd>⌘ K</kbd>
           </label>
-          <button className="icon-button notification-button" aria-label="Notifications" onClick={() => notify("You're all caught up")}>
-            <Bell /><span>3</span>
+          <button className="icon-button notification-button" aria-label="Notifications" onClick={enableNotifications}>
+            <Bell />{messages.length ? <span>{Math.min(messages.length, 9)}</span> : null}
           </button>
           <button className="profile-button" onClick={logout} title="Log out">
             <b>{user.displayName.slice(0, 2).toUpperCase()}</b>
@@ -202,7 +254,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             <div className="metrics">
               <Metric icon={<CheckCircle2 />} color="mint" value={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} progress={tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : 0} />
               <Metric icon={<ShoppingCart />} color="lime" value={`${shopping.length} items`} progress={72} />
-              <Metric icon={<MessageCircle />} color="cyan" value="3 unread" progress={42} />
+              <Metric icon={<MessageCircle />} color="cyan" value={`${messages.length} messages`} progress={messages.length ? 65 : 0} />
             </div>
           </section>
 
@@ -249,12 +301,23 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             </article>
 
             <article className="module-card chat-card">
-              <CardHeader title="Chat" detail="3 unread" />
-              <div className="chat-list">
-                <ChatMessage initials="AM" name="Ana" time="7:45 PM" message="Can you pick up the dry cleaning tomorrow?" />
-                <ChatMessage initials="JD" name="John" time="6:30 PM" message="I found some great hiking trails nearby!" />
+              <CardHeader title="Chat" detail={`${messages.length} messages`} />
+              <div className="chat-list live-chat-list">
+                {!messages.length ? <p className="empty-list">No messages yet. Say hello!</p> : null}
+                {messages.slice(-4).map((message) => (
+                  <ChatMessage
+                    key={message.id}
+                    initials={message.displayName.slice(0, 2).toUpperCase()}
+                    name={message.displayName}
+                    time={new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    message={message.body}
+                  />
+                ))}
               </div>
-              <button className="add-link cyan-text" onClick={() => notify("Persistent chat comes in Stage 5")}>View all conversations <span>→</span></button>
+              <form className="chat-compose" onSubmit={sendMessage}>
+                <input name="message" maxLength={2000} placeholder={`Message ${activeGroup.name}`} aria-label="Chat message" autoComplete="off" />
+                <button disabled={sendingMessage} aria-label="Send message">↑</button>
+              </form>
             </article>
           </section>
         </div>
@@ -340,4 +403,11 @@ function CardHeader({ title, detail }: { title: string; detail: string }) {
 
 function ChatMessage({ initials, name, time, message }: { initials: string; name: string; time: string; message: string }) {
   return <div className="chat-message"><i className="chat-avatar">{initials}</i><div><div><strong>{name}</strong><time><span />{time}</time></div><p>{message}</p></div></div>;
+}
+
+function urlBase64ToUint8Array(value: string) {
+  const padding = "=".repeat((4 - value.length % 4) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
 }
