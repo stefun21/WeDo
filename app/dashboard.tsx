@@ -64,6 +64,8 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [kickTarget, setKickTarget] = useState<Member | null>(null);
+  const [taskPage, setTaskPage] = useState(0);
+  const [shoppingPage, setShoppingPage] = useState(0);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -292,6 +294,10 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const filteredTasks = tasks.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredShopping = shopping.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredMessages = messages.filter((item) => `${item.displayName} ${item.body}`.toLowerCase().includes(searchQuery.toLowerCase()));
+  const taskPageCount = Math.max(1, Math.ceil(filteredTasks.length / 4));
+  const shoppingPageCount = Math.max(1, Math.ceil(filteredShopping.length / 4));
+  const visibleTasks = filteredTasks.slice(Math.min(taskPage, taskPageCount - 1) * 4, Math.min(taskPage, taskPageCount - 1) * 4 + 4);
+  const visibleShopping = filteredShopping.slice(Math.min(shoppingPage, shoppingPageCount - 1) * 4, Math.min(shoppingPage, shoppingPageCount - 1) * 4 + 4);
   const latestMessage = messages.at(-1);
   const mentionMatch = chatDraft.match(/@([a-zA-Z0-9_-]*)$/);
   const mentionSuggestions = mentionMatch
@@ -379,7 +385,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
         </header>
 
         {!online ? <div className="offline-banner"><WifiOff /> You’re offline — showing saved data</div> : null}
-        <div className="dashboard" id="dashboard-top">
+        <div className={`dashboard dashboard-${active.toLowerCase()}`} id="dashboard-top">
           <section className="welcome-row">
             <div>
               <p className="eyebrow"><Sparkles /> YOUR SHARED SPACE</p>
@@ -411,7 +417,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               <div className="thin-progress"><span style={{ width: `${tasks.length ? tasks.filter((task) => task.done).length / tasks.length * 100 : 0}%` }} /></div>
               <div className="rows">
                 {!workspaceLoading && !tasks.length ? <p className="empty-list">No tasks yet. Add the first one.</p> : null}
-                {filteredTasks.map((task) => (
+                {visibleTasks.map((task) => (
                   <button
                     className={`item-row ${task.done ? "completed" : ""}`}
                     key={task.id}
@@ -424,6 +430,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                   </button>
                 ))}
               </div>
+              <ListPager page={Math.min(taskPage, taskPageCount - 1)} pages={taskPageCount} setPage={setTaskPage} />
               <button className="add-link mint-text" onClick={() => setEditor("task")}><Plus /> Add task</button>
             </article> : null}
 
@@ -432,7 +439,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               {shopping.length > 0 ? <div className="thin-progress lime-progress"><span style={{ width: `${Math.round(shopping.filter((item) => item.done).length / shopping.length * 100)}%` }} /></div> : null}
               <div className="rows">
                 {!workspaceLoading && !shopping.length ? <p className="empty-list">Your shopping list is empty.</p> : null}
-                {filteredShopping.map((item) => (
+                {visibleShopping.map((item) => (
                   <button
                     className={`item-row ${item.done ? "completed" : ""}`}
                     key={item.id}
@@ -444,6 +451,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                   </button>
                 ))}
               </div>
+              <ListPager page={Math.min(shoppingPage, shoppingPageCount - 1)} pages={shoppingPageCount} setPage={setShoppingPage} />
               <button className="add-link lime-text" onClick={() => setEditor("shopping")}><Plus /> Add item</button>
             </article> : null}
 
@@ -603,6 +611,11 @@ function Metric({ icon, color, value, progress, showProgress = true }: { icon: R
 
 function CardHeader({ title, detail }: { title: string; detail: string }) {
   return <header className="card-header"><div><h2>{title}</h2><p>{detail}</p></div><button>View all</button></header>;
+}
+
+function ListPager({ page, pages, setPage }: { page: number; pages: number; setPage: React.Dispatch<React.SetStateAction<number>> }) {
+  if (pages <= 1) return null;
+  return <div className="list-pager"><button disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>←</button><span>{page + 1} / {pages}</span><button disabled={page >= pages - 1} onClick={() => setPage((value) => Math.min(pages - 1, value + 1))}>→</button></div>;
 }
 
 function ChatMessage({ initials, name, time, message }: { initials: string; name: string; time: string; message: string }) {
