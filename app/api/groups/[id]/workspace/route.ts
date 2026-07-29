@@ -68,10 +68,20 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!(await access(id, user.id))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await request.json();
   const itemId = String(body.itemId || "");
-  const completed = Boolean(body.completed);
   const query = sql();
-  if (body.type === "task") await query`UPDATE tasks SET completed = ${completed}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
-  else if (body.type === "shopping") await query`UPDATE shopping_items SET completed = ${completed}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
+  if (body.action === "edit" && body.type === "task") {
+    const title = String(body.title || "").trim();
+    if (!title || title.length > 180) return NextResponse.json({ error: "Task title must contain 1–180 characters." }, { status: 400 });
+    const dueDate = body.dueDate ? String(body.dueDate) : null;
+    const assignedTo = body.assignedTo ? String(body.assignedTo) : null;
+    await query`UPDATE tasks SET title = ${title}, due_date = ${dueDate}, assigned_to = ${assignedTo}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
+  } else if (body.action === "edit" && body.type === "shopping") {
+    const name = String(body.name || "").trim();
+    const quantity = String(body.quantity || "").trim().slice(0, 30) || null;
+    if (!name || name.length > 180) return NextResponse.json({ error: "Item name must contain 1–180 characters." }, { status: 400 });
+    await query`UPDATE shopping_items SET name = ${name}, quantity = ${quantity}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
+  } else if (body.type === "task") await query`UPDATE tasks SET completed = ${Boolean(body.completed)}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
+  else if (body.type === "shopping") await query`UPDATE shopping_items SET completed = ${Boolean(body.completed)}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
   else return NextResponse.json({ error: "Invalid item type." }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

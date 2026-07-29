@@ -9,9 +9,11 @@ import {
   Home,
   ListTodo,
   LogOut,
+  Minus,
   Menu,
   MessageCircle,
   Plus,
+  Pencil,
   Search,
   ShoppingCart,
   Sparkles,
@@ -19,6 +21,7 @@ import {
   Users,
   WifiOff,
   Download,
+  Trash2,
   X,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
@@ -30,8 +33,9 @@ const navItems = [
   { label: "Chat", icon: MessageCircle },
 ];
 
-type Task = { id: string; title: string; done: boolean; person: string; when: string };
+type Task = { id: string; title: string; done: boolean; person: string; when: string; dueDate: string; assignedTo: string };
 type ShoppingItem = { id: string; title: string; amount: string; done: boolean };
+type EditableItem = { type: "task"; item: Task } | { type: "shopping"; item: ShoppingItem };
 type Message = { id: string; body: string; createdAt: string; userId: string; displayName: string };
 type Member = { id: string; username: string; display_name: string; role: "owner" | "admin" | "member"; joined_at: string };
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
@@ -65,6 +69,8 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [kickTarget, setKickTarget] = useState<Member | null>(null);
   const [taskPage, setTaskPage] = useState(0);
   const [shoppingPage, setShoppingPage] = useState(0);
+  const [editingItem, setEditingItem] = useState<EditableItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<EditableItem | null>(null);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -110,10 +116,12 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     const response = await fetch(`/api/groups/${activeGroup.id}/workspace`, { cache: "no-store" });
     const data = await response.json();
     if (response.ok) {
-      setTasks(data.tasks.map((task: { id: string; title: string; completed: boolean; assigned_name?: string; due_date?: string }) => ({
+      setTasks(data.tasks.map((task: { id: string; title: string; completed: boolean; assigned_name?: string; assigned_to?: string; due_date?: string }) => ({
         id: task.id, title: task.title, done: task.completed,
         person: task.assigned_name?.slice(0, 1).toUpperCase() || user.displayName.slice(0, 1).toUpperCase(),
         when: task.due_date ? new Date(task.due_date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "",
+        dueDate: task.due_date ? String(task.due_date).slice(0, 10) : "",
+        assignedTo: task.assigned_to || "",
       })));
       setShopping(data.shopping.map((item: { id: string; name: string; quantity?: string; completed: boolean }) => ({
         id: item.id, title: item.name, amount: item.quantity || "", done: item.completed,
@@ -123,7 +131,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
       const cached = localStorage.getItem(`wedo-workspace-${activeGroup.id}`);
       if (cached) {
         const stored = JSON.parse(cached);
-        setTasks(stored.tasks.map((task: { id: string; title: string; completed: boolean; assigned_name?: string; due_date?: string }) => ({ id: task.id, title: task.title, done: task.completed, person: task.assigned_name?.slice(0, 1).toUpperCase() || user.displayName.slice(0, 1).toUpperCase(), when: task.due_date ? new Date(task.due_date).toLocaleDateString() : "" })));
+        setTasks(stored.tasks.map((task: { id: string; title: string; completed: boolean; assigned_name?: string; assigned_to?: string; due_date?: string }) => ({ id: task.id, title: task.title, done: task.completed, person: task.assigned_name?.slice(0, 1).toUpperCase() || user.displayName.slice(0, 1).toUpperCase(), when: task.due_date ? new Date(task.due_date).toLocaleDateString() : "", dueDate: task.due_date ? String(task.due_date).slice(0, 10) : "", assignedTo: task.assigned_to || "" })));
         setShopping(stored.shopping.map((item: { id: string; name: string; quantity?: string; completed: boolean }) => ({ id: item.id, title: item.name, amount: item.quantity || "", done: item.completed })));
       } else notify("Could not load this group");
     }
@@ -215,6 +223,40 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     setEditor(null);
     notify(editor === "task" ? "Task added" : "Shopping item added");
     loadWorkspace();
+  };
+
+  const saveItemEdit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editingItem) return;
+    const fields = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const response = await fetch(`/api/groups/${activeGroup.id}/workspace`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "edit", type: editingItem.type, itemId: editingItem.item.id, ...fields }),
+    });
+    const data = await response.json();
+    if (!response.ok) return notify(data.error || "Could not save changes");
+    setEditingItem(null);
+    notify("Changes saved");
+    void loadWorkspace();
+  };
+
+  const changeQuantity = async (item: ShoppingItem, delta: number) => {
+    const current = Number.parseInt(item.amount, 10) || 1;
+    const quantity = String(Math.max(1, current + delta));
+    setShopping((all) => all.map((entry) => entry.id === item.id ? { ...entry, amount: quantity } : entry));
+    await fetch(`/api/groups/${activeGroup.id}/workspace`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "edit", type: "shopping", itemId: item.id, name: item.title, quantity }),
+    });
+  };
+
+  const deleteItem = async () => {
+    if (!deleteTarget) return;
+    const response = await fetch(`/api/groups/${activeGroup.id}/workspace?type=${deleteTarget.type}&itemId=${deleteTarget.item.id}`, { method: "DELETE" });
+    if (!response.ok) return notify("Could not delete this item");
+    setDeleteTarget(null);
+    notify(deleteTarget.type === "task" ? "Task deleted" : "Shopping item deleted");
+    void loadWorkspace();
   };
 
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
@@ -405,16 +447,13 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               <div className="rows">
                 {!workspaceLoading && !tasks.length ? <p className="empty-list">No tasks yet. Add the first one.</p> : null}
                 {visibleTasks.map((task) => (
-                  <button
-                    className={`item-row ${task.done ? "completed" : ""}`}
-                    key={task.id}
-                    onClick={() => toggleItem("task", task.id, !task.done)}
-                  >
-                    <span className="check">{task.done ? <Check /> : <Circle />}</span>
+                  <div className={`item-row pro-row ${task.done ? "completed" : ""}`} key={task.id}>
+                    <button className="row-check-button" onClick={() => toggleItem("task", task.id, !task.done)} aria-label={task.done ? "Mark task incomplete" : "Complete task"}><span className="check">{task.done ? <Check /> : <Circle />}</span></button>
                     <span className="item-name">{task.title}</span>
                     <i className="mini-avatar">{task.person}</i>
                     <time>{task.when}</time>
-                  </button>
+                    <div className="row-actions"><button onClick={() => setEditingItem({ type: "task", item: task })} aria-label="Edit task"><Pencil /></button><button className="danger-action" onClick={() => setDeleteTarget({ type: "task", item: task })} aria-label="Delete task"><Trash2 /></button></div>
+                  </div>
                 ))}
               </div>
               <ListPager page={Math.min(taskPage, taskPageCount - 1)} pages={taskPageCount} setPage={setTaskPage} />
@@ -428,15 +467,12 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               <div className="rows">
                 {!workspaceLoading && !shopping.length ? <p className="empty-list">Your shopping list is empty.</p> : null}
                 {visibleShopping.map((item) => (
-                  <button
-                    className={`item-row ${item.done ? "completed" : ""}`}
-                    key={item.id}
-                    onClick={() => toggleItem("shopping", item.id, !item.done)}
-                  >
-                    <span className="check lime-check">{item.done ? <Check /> : <Circle />}</span>
+                  <div className={`item-row pro-row shopping-pro-row ${item.done ? "completed" : ""}`} key={item.id}>
+                    <button className="row-check-button" onClick={() => toggleItem("shopping", item.id, !item.done)} aria-label={item.done ? "Mark item unbought" : "Mark item bought"}><span className="check lime-check">{item.done ? <Check /> : <Circle />}</span></button>
                     <span className="item-name">{item.title}</span>
-                    <small className="amount">{item.amount}</small>
-                  </button>
+                    <div className="quantity-stepper"><button onClick={() => changeQuantity(item, -1)} aria-label="Decrease quantity"><Minus /></button><b>{Number.parseInt(item.amount, 10) || 1}</b><button onClick={() => changeQuantity(item, 1)} aria-label="Increase quantity"><Plus /></button></div>
+                    <div className="row-actions"><button onClick={() => setEditingItem({ type: "shopping", item })} aria-label="Edit item"><Pencil /></button><button className="danger-action" onClick={() => setDeleteTarget({ type: "shopping", item })} aria-label="Delete item"><Trash2 /></button></div>
+                  </div>
                 ))}
               </div>
               <ListPager page={Math.min(shoppingPage, shoppingPageCount - 1)} pages={shoppingPageCount} setPage={setShoppingPage} />
@@ -548,6 +584,34 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               {editor === "task" ? <label>Due date <input type="date" name="dueDate" /></label> : <label>Quantity <input name="quantity" maxLength={30} placeholder="e.g. 2 or 1 kg" /></label>}
               <button className="auth-submit">Add to {activeGroup.name} <Plus /></button>
             </form>
+          </section>
+        </div>
+      ) : null}
+      {editingItem ? (
+        <div className="invite-modal-backdrop" onClick={() => setEditingItem(null)}>
+          <section className="invite-modal item-editor pro-editor" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setEditingItem(null)}><X /></button>
+            <p className="auth-kicker">{editingItem.type === "task" ? "EDIT TASK" : "EDIT SHOPPING ITEM"}</p>
+            <h2>Make it just right</h2>
+            <form onSubmit={saveItemEdit}>
+              <label>{editingItem.type === "task" ? "Task title" : "Item name"}<input name={editingItem.type === "task" ? "title" : "name"} defaultValue={editingItem.item.title} maxLength={180} autoFocus required /></label>
+              {editingItem.type === "task" ? <>
+                <label>Due date<input type="date" name="dueDate" defaultValue={editingItem.item.dueDate} /></label>
+                <label>Assigned to<select name="assignedTo" defaultValue={editingItem.item.assignedTo}><option value="">Unassigned</option>{groupMembers.map((member) => <option value={member.id} key={member.id}>{member.display_name}</option>)}</select></label>
+              </> : <label>Quantity<input name="quantity" defaultValue={editingItem.item.amount || "1"} maxLength={30} /></label>}
+              <button className="auth-submit"><Check /> Save changes</button>
+            </form>
+          </section>
+        </div>
+      ) : null}
+      {deleteTarget ? (
+        <div className="invite-modal-backdrop" onClick={() => setDeleteTarget(null)}>
+          <section className="invite-modal kick-confirmation" onClick={(event) => event.stopPropagation()}>
+            <div className="danger-icon"><Trash2 /></div>
+            <p className="auth-kicker">DELETE {deleteTarget.type.toUpperCase()}</p>
+            <h2>Delete “{deleteTarget.item.title}”?</h2>
+            <p>This action removes it for everyone in the group and cannot be undone.</p>
+            <div className="confirmation-actions"><button onClick={() => setDeleteTarget(null)}>Cancel</button><button onClick={deleteItem}>Yes, delete it</button></div>
           </section>
         </div>
       ) : null}
