@@ -1,9 +1,9 @@
-# WeDo — Stage 3/6
+# WeDo — Stage 4/6
 
 Aplicație PWA colaborativă pentru grupuri, construită cu Next.js, TypeScript,
-Tailwind CSS și PostgreSQL. Stage 3 adaugă grupuri private și invitații.
+Tailwind CSS și PostgreSQL. Stage 4 adaugă task-uri și cumpărături colaborative.
 
-## Ce funcționează în Stage 3
+## Ce funcționează în Stage 4
 
 - design responsive pentru PC și mobil;
 - navigație desktop și mobilă;
@@ -28,6 +28,14 @@ Tailwind CSS și PostgreSQL. Stage 3 adaugă grupuri private și invitații.
 - listarea securizată a membrilor;
 - schimbarea grupului activ;
 - suport pentru mai multe grupuri per utilizator.
+- task-uri reale, salvate separat pentru fiecare grup;
+- adăugare task cu termen-limită;
+- bifare și debifare sincronizată;
+- listă reală de cumpărături;
+- cantități opționale pentru produse;
+- adăugare din butonul principal `Add new`;
+- reîncărcarea automată a datelor la schimbarea grupului;
+- stări goale pentru grupurile noi.
 
 ## Pornire locală
 
@@ -75,11 +83,11 @@ git push -u origin main
 
 ## Actualizarea proiectului pe GitHub
 
-1. Dezarhivează ZIP-ul Stage 3.
+1. Dezarhivează ZIP-ul Stage 4.
 2. Deschide repository-ul `wedo` pe GitHub.
 3. Șterge fișierele vechi sau înlocuiește-le cu toate fișierele din noul ZIP.
 4. Verifică să existe direct la rădăcină `app`, `lib`, `public` și `package.json`.
-5. Salvează cu mesajul `WeDo Stage 3`.
+5. Salvează cu mesajul `WeDo Stage 4`.
 
 Vercel va încerca automat un nou deployment. Acesta va fi complet funcțional
 după configurarea bazei de date și a secretului descrise mai jos.

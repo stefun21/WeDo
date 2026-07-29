@@ -51,4 +51,29 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await query`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      title VARCHAR(180) NOT NULL,
+      completed BOOLEAN NOT NULL DEFAULT FALSE,
+      created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+      due_date DATE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await query`
+    CREATE TABLE IF NOT EXISTS shopping_items (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      name VARCHAR(180) NOT NULL,
+      quantity VARCHAR(30),
+      completed BOOLEAN NOT NULL DEFAULT FALSE,
+      created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
 }

@@ -219,4 +219,9 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.08; letter-spa
 .quick-add-list > button:hover { border-color: rgba(110,242,176,.48); background: rgba(110,242,176,.055); transform: translateX(2px); }
 .quick-add-list i { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; background: rgba(110,242,176,.1); color: var(--mint); }.quick-add-list i svg { width: 20px; }
 .quick-add-list span { display: grid; gap: 5px; }.quick-add-list strong { font-size: 13px; }.quick-add-list small { color: var(--muted); font-size: 11px; }.quick-add-list b { color: var(--mint); font-size: 18px; }
+.empty-list { margin: 28px 0; color: var(--muted); font-size: 12px; text-align: center; }
+.item-editor { text-align: left; }.item-editor > h2 { margin-bottom: 23px; }
+.item-editor form { display: grid; gap: 16px; }.item-editor label { display: grid; gap: 8px; color: #ced6df; font-size: 12px; font-weight: 700; }
+.item-editor input { width: 100%; height: 48px; padding: 0 13px; border: 1px solid var(--border); border-radius: 10px; outline: 0; background: #0d1520; color: var(--text); color-scheme: dark; }
+.item-editor input:focus { border-color: var(--mint); box-shadow: 0 0 0 3px rgba(110,242,176,.09); }
 @media (max-width: 620px) { .group-choice-grid { grid-template-columns: 1fr; }.group-choice-grid > button { min-height: 205px; }.group-setup-shell { padding: 21px 15px; } }

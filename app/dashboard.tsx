@@ -21,7 +21,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
 const navItems = [
   { label: "Overview", icon: Home },
@@ -33,32 +33,22 @@ const navItems = [
   { label: "Settings", icon: Settings },
 ];
 
-const initialTasks = [
-  { id: 1, title: "Prepare dinner", person: "M", when: "Today", done: true },
-  { id: 2, title: "Take out the trash", person: "A", when: "Tomorrow", done: false },
-  { id: 3, title: "Book weekend getaway", person: "S", when: "May 25", done: false },
-  { id: 4, title: "Pay electricity bill", person: "J", when: "May 20", done: true },
-];
-
-const initialShopping = [
-  { id: 1, title: "Milk", amount: "2", done: false },
-  { id: 2, title: "Eggs", amount: "1 doz", done: false },
-  { id: 3, title: "Chicken breasts", amount: "1 kg", done: false },
-  { id: 4, title: "Bananas", amount: "6", done: true },
-  { id: 5, title: "Dishwasher tablets", amount: "1", done: false },
-];
+type Task = { id: string; title: string; done: boolean; person: string; when: string };
+type ShoppingItem = { id: string; title: string; amount: string; done: boolean };
 
 type Group = { id: string; name: string; role: "owner" | "admin" | "member"; memberCount: number };
 
 export default function Dashboard({ user, groups }: { user: { username: string; displayName: string }; groups: Group[] }) {
   const [active, setActive] = useState("Overview");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [tasks, setTasks] = useState(initialTasks);
-  const [shopping, setShopping] = useState(initialShopping);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [toast, setToast] = useState("");
   const [activeGroup, setActiveGroup] = useState(groups[0]);
   const [invite, setInvite] = useState("");
   const [quickAdd, setQuickAdd] = useState(false);
+  const [editor, setEditor] = useState<"task" | "shopping" | null>(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(true);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -66,10 +56,30 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
     }
   }, []);
 
-  const notify = (message: string) => {
+  const notify = useCallback((message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2200);
-  };
+  }, []);
+
+  const loadWorkspace = useCallback(async () => {
+    const response = await fetch(`/api/groups/${activeGroup.id}/workspace`, { cache: "no-store" });
+    const data = await response.json();
+    if (response.ok) {
+      setTasks(data.tasks.map((task: { id: string; title: string; completed: boolean; assigned_name?: string; due_date?: string }) => ({
+        id: task.id, title: task.title, done: task.completed,
+        person: task.assigned_name?.slice(0, 1).toUpperCase() || user.displayName.slice(0, 1).toUpperCase(),
+        when: task.due_date ? new Date(task.due_date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "",
+      })));
+      setShopping(data.shopping.map((item: { id: string; name: string; quantity?: string; completed: boolean }) => ({
+        id: item.id, title: item.name, amount: item.quantity || "", done: item.completed,
+      })));
+    } else notify(data.error || "Could not load this group");
+    setWorkspaceLoading(false);
+  }, [activeGroup.id, user.displayName, notify]);
+
+  // Loading remote collaborative state is the synchronization purpose of this effect.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -82,6 +92,31 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
     const data = await response.json();
     if (!response.ok) return notify(data.error || "Invite could not be created");
     setInvite(data.code);
+  };
+
+  const toggleItem = async (type: "task" | "shopping", itemId: string, completed: boolean) => {
+    if (type === "task") setTasks((all) => all.map((item) => item.id === itemId ? { ...item, done: completed } : item));
+    else setShopping((all) => all.map((item) => item.id === itemId ? { ...item, done: completed } : item));
+    const response = await fetch(`/api/groups/${activeGroup.id}/workspace`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, itemId, completed }),
+    });
+    if (!response.ok) { notify("The change could not be saved"); loadWorkspace(); }
+  };
+
+  const addWorkspaceItem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editor) return;
+    const form = new FormData(event.currentTarget);
+    const response = await fetch(`/api/groups/${activeGroup.id}/workspace`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: editor, ...Object.fromEntries(form.entries()) }),
+    });
+    const data = await response.json();
+    if (!response.ok) return notify(data.error || "Could not save the item");
+    setEditor(null);
+    notify(editor === "task" ? "Task added" : "Shopping item added");
+    loadWorkspace();
   };
 
   return (
@@ -165,7 +200,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
           <section className="overview-card">
             <div className="overview-heading"><h2>Overview</h2><button><MoreHorizontal /></button></div>
             <div className="metrics">
-              <Metric icon={<CheckCircle2 />} color="mint" value={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} progress={50} />
+              <Metric icon={<CheckCircle2 />} color="mint" value={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} progress={tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : 0} />
               <Metric icon={<ShoppingCart />} color="lime" value={`${shopping.length} items`} progress={72} />
               <Metric icon={<MessageCircle />} color="cyan" value="3 unread" progress={42} />
             </div>
@@ -174,13 +209,14 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
           <section className="card-grid">
             <article className="module-card">
               <CardHeader title="Tasks" detail={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} />
-              <div className="thin-progress"><span style={{ width: "50%" }} /></div>
+              <div className="thin-progress"><span style={{ width: `${tasks.length ? tasks.filter((task) => task.done).length / tasks.length * 100 : 0}%` }} /></div>
               <div className="rows">
+                {!workspaceLoading && !tasks.length ? <p className="empty-list">No tasks yet. Add the first one.</p> : null}
                 {tasks.map((task) => (
                   <button
                     className={`item-row ${task.done ? "completed" : ""}`}
                     key={task.id}
-                    onClick={() => setTasks((all) => all.map((item) => item.id === task.id ? { ...item, done: !item.done } : item))}
+                    onClick={() => toggleItem("task", task.id, !task.done)}
                   >
                     <span className="check">{task.done ? <Check /> : <Circle />}</span>
                     <span className="item-name">{task.title}</span>
@@ -189,18 +225,19 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
                   </button>
                 ))}
               </div>
-              <button className="add-link mint-text" onClick={() => notify("Task creator comes in Stage 4")}><Plus /> Add task</button>
+              <button className="add-link mint-text" onClick={() => setEditor("task")}><Plus /> Add task</button>
             </article>
 
             <article className="module-card">
               <CardHeader title="Shopping" detail={`${shopping.length} items`} />
               <div className="thin-progress lime-progress"><span style={{ width: "72%" }} /></div>
               <div className="rows">
+                {!workspaceLoading && !shopping.length ? <p className="empty-list">Your shopping list is empty.</p> : null}
                 {shopping.map((item) => (
                   <button
                     className={`item-row ${item.done ? "completed" : ""}`}
                     key={item.id}
-                    onClick={() => setShopping((all) => all.map((entry) => entry.id === item.id ? { ...entry, done: !entry.done } : entry))}
+                    onClick={() => toggleItem("shopping", item.id, !item.done)}
                   >
                     <span className="check lime-check">{item.done ? <Check /> : <Circle />}</span>
                     <span className="item-name">{item.title}</span>
@@ -208,7 +245,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
                   </button>
                 ))}
               </div>
-              <button className="add-link lime-text" onClick={() => notify("Shopping editor comes in Stage 4")}><Plus /> Add item</button>
+              <button className="add-link lime-text" onClick={() => setEditor("shopping")}><Plus /> Add item</button>
             </article>
 
             <article className="module-card chat-card">
@@ -244,14 +281,14 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
                 <span><strong>Invite member</strong><small>Generate a private invitation code</small></span>
                 <b>→</b>
               </button>
-              <button onClick={() => { setQuickAdd(false); notify("Task creator comes in Stage 4"); }}>
+              <button onClick={() => { setQuickAdd(false); setEditor("task"); }}>
                 <i><ListTodo /></i>
-                <span><strong>Add task</strong><small>Available in the next stage</small></span>
+                <span><strong>Add task</strong><small>Create a shared task</small></span>
                 <b>→</b>
               </button>
-              <button onClick={() => { setQuickAdd(false); notify("Shopping editor comes in Stage 4"); }}>
+              <button onClick={() => { setQuickAdd(false); setEditor("shopping"); }}>
                 <i><ShoppingCart /></i>
-                <span><strong>Add shopping item</strong><small>Available in the next stage</small></span>
+                <span><strong>Add shopping item</strong><small>Add it to the shared list</small></span>
                 <b>→</b>
               </button>
             </div>
@@ -269,6 +306,23 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             <button className="recovery-code" onClick={() => { navigator.clipboard.writeText(invite); notify("Invite code copied"); }}>
               {invite}<span>Click to copy</span>
             </button>
+          </section>
+        </div>
+      ) : null}
+      {editor ? (
+        <div className="invite-modal-backdrop" onClick={() => setEditor(null)}>
+          <section className="invite-modal item-editor" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setEditor(null)}><X /></button>
+            <p className="auth-kicker">{editor === "task" ? "NEW TASK" : "SHOPPING LIST"}</p>
+            <h2>{editor === "task" ? "What needs to be done?" : "What do you need?"}</h2>
+            <form onSubmit={addWorkspaceItem}>
+              <label>
+                {editor === "task" ? "Task title" : "Item name"}
+                <input name={editor === "task" ? "title" : "name"} maxLength={180} autoFocus placeholder={editor === "task" ? "e.g. Pay the electricity bill" : "e.g. Milk"} required />
+              </label>
+              {editor === "task" ? <label>Due date <input type="date" name="dueDate" /></label> : <label>Quantity <input name="quantity" maxLength={30} placeholder="e.g. 2 or 1 kg" /></label>}
+              <button className="auth-submit">Add to {activeGroup.name} <Plus /></button>
+            </form>
           </section>
         </div>
       ) : null}
