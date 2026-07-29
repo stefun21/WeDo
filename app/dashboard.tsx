@@ -20,7 +20,6 @@ import {
   Users,
   WifiOff,
   Download,
-  Trash2,
   X,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
@@ -47,7 +46,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [tasks, setTasks] = useState<Task[]>([]);
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [toast, setToast] = useState("");
-  const [activeGroup, setActiveGroup] = useState(groups[0]);
+  const [activeGroup] = useState(groups[0]);
   const [invite, setInvite] = useState("");
   const [quickAdd, setQuickAdd] = useState(false);
   const [editor, setEditor] = useState<"task" | "shopping" | null>(null);
@@ -60,9 +59,12 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [groupMembers, setGroupMembers] = useState<Member[]>([]);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [chatDraft, setChatDraft] = useState("");
+  const [inviteRolePicker, setInviteRolePicker] = useState(false);
+  const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
+  const [editingMember, setEditingMember] = useState<string | null>(null);
+  const [kickTarget, setKickTarget] = useState<Member | null>(null);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -158,11 +160,22 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     window.location.reload();
   };
 
-  const createInvite = async () => {
+  const createInvite = () => {
     setQuickAdd(false);
-    const response = await fetch(`/api/groups/${activeGroup.id}/invites`, { method: "POST" });
+    setMembers(null);
+    setInviteRole("member");
+    setInviteRolePicker(true);
+  };
+
+  const generateInvite = async () => {
+    const response = await fetch(`/api/groups/${activeGroup.id}/invites`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: inviteRole }),
+    });
     const data = await response.json();
     if (!response.ok) return notify(data.error || "Invite could not be created");
+    setInviteRolePicker(false);
     setInvite(data.code);
   };
 
@@ -235,6 +248,13 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     document.getElementById("dashboard-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
+  const showMembers = async () => {
+    const response = await fetch(`/api/groups/${activeGroup.id}/members`, { cache: "no-store" });
+    const data = await response.json();
+    if (response.ok) setMembers(data.members);
+    else notify(data.error || "Members could not be loaded");
+  };
+
   const updateMember = async (memberId: string, action: "role" | "remove", role?: "admin" | "member") => {
     const endpoint = `/api/groups/${activeGroup.id}/members${action === "remove" ? `?memberId=${memberId}` : ""}`;
     const response = await fetch(endpoint, {
@@ -244,6 +264,9 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     });
     if (!response.ok) { const data = await response.json(); return notify(data.error || "Member could not be updated"); }
     setMembers((current) => current ? current.filter((entry) => action !== "remove" || entry.id !== memberId).map((entry) => entry.id === memberId && role ? { ...entry, role } : entry) : null);
+    setGroupMembers((current) => current.filter((entry) => action !== "remove" || entry.id !== memberId).map((entry) => entry.id === memberId && role ? { ...entry, role } : entry));
+    setEditingMember(null);
+    setKickTarget(null);
     notify(action === "remove" ? "Member removed" : "Role updated");
   };
 
@@ -265,13 +288,6 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
 
   const selectMention = (username: string) => {
     setChatDraft((current) => current.replace(/@([a-zA-Z0-9_-]*)$/, `@${username} `));
-  };
-
-  const selectGroup = (group: Group) => {
-    setActiveGroup(group);
-    setGroupMenuOpen(false);
-    setActive("Overview");
-    setWorkspaceLoading(true);
   };
 
   return (
@@ -361,16 +377,9 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               <p className="eyebrow"><Sparkles /> YOUR SHARED SPACE</p>
               <h1>Good evening, {user.displayName}</h1>
               <div className="group-line">
-                <div className="group-picker">
-                  <button className={`group-select ${groupMenuOpen ? "open" : ""}`} onClick={() => setGroupMenuOpen((current) => !current)} aria-expanded={groupMenuOpen}>
-                    <Home /> {activeGroup.name} <ChevronDown />
-                  </button>
-                  {groupMenuOpen ? <div className="group-dropdown">
-                    {groups.map((group) => <button key={group.id} className={group.id === activeGroup.id ? "active" : ""} onClick={() => selectGroup(group)}>
-                      <Home /><span><strong>{group.name}</strong><small>{group.memberCount} {group.memberCount === 1 ? "member" : "members"}</small></span>{group.id === activeGroup.id ? <Check /> : null}
-                    </button>)}
-                  </div> : null}
-                </div>
+                <button className="group-select members-trigger" onClick={showMembers}>
+                  <Users /> Members <span>{groupMembers.length}</span>
+                </button>
                 <div className="avatar-stack hero-avatars">
                   {groupMembers.slice(0, 4).map((member) => <i key={member.id} title={member.display_name}>{member.display_name.slice(0, 2).toUpperCase()}</i>)}
                   {groupMembers.length > 4 ? <i>+{groupMembers.length - 4}</i> : null}
@@ -502,10 +511,25 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             <div className="success-icon"><UserPlus /></div>
             <p className="auth-kicker">PRIVATE INVITATION</p>
             <h2>Invite someone to {activeGroup.name}</h2>
-            <p>Share this code. It expires automatically in 7 days.</p>
+            <p>Share this code. They’ll join as <strong>{inviteRole}</strong>, and the code expires automatically in 7 days.</p>
             <button className="recovery-code" onClick={() => { navigator.clipboard.writeText(invite); notify("Invite code copied"); }}>
               {invite}<span>Click to copy</span>
             </button>
+          </section>
+        </div>
+      ) : null}
+      {inviteRolePicker ? (
+        <div className="invite-modal-backdrop" onClick={() => setInviteRolePicker(false)}>
+          <section className="invite-modal role-picker-modal" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setInviteRolePicker(false)}><X /></button>
+            <p className="auth-kicker">INVITE TO {activeGroup.name.toUpperCase()}</p>
+            <h2>Choose their role</h2>
+            <p>You can change this later from the Members list.</p>
+            <div className="role-options">
+              <button className={inviteRole === "member" ? "active" : ""} onClick={() => setInviteRole("member")}><span><strong>Member</strong><small>Can use tasks, shopping and chat.</small></span><i>{inviteRole === "member" ? <Check /> : null}</i></button>
+              {activeGroup.role === "owner" ? <button className={inviteRole === "admin" ? "active" : ""} onClick={() => setInviteRole("admin")}><span><strong>Admin</strong><small>Can also invite people and help manage the group.</small></span><i>{inviteRole === "admin" ? <Check /> : null}</i></button> : null}
+            </div>
+            <button className="auth-submit" onClick={generateInvite}><UserPlus /> Generate invite</button>
           </section>
         </div>
       ) : null}
@@ -537,16 +561,31 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                 <div className="member-row" key={member.id}>
                   <i>{member.display_name.slice(0, 2).toUpperCase()}</i>
                   <span><strong>{member.display_name}</strong><small>@{member.username}</small></span>
+                  <b>{member.role}</b>
                   {activeGroup.role === "owner" && member.role !== "owner" ? (
                     <>
-                      <select value={member.role} onChange={(event) => updateMember(member.id, "role", event.target.value as "admin" | "member")}><option value="member">Member</option><option value="admin">Admin</option></select>
-                      <button onClick={() => updateMember(member.id, "remove")} aria-label={`Remove ${member.display_name}`}><Trash2 /></button>
+                      {editingMember === member.id ? <select value={member.role} autoFocus onChange={(event) => updateMember(member.id, "role", event.target.value as "admin" | "member")}><option value="member">Member</option><option value="admin">Admin</option></select> : <button className="edit-role-button" onClick={() => setEditingMember(member.id)}>Edit</button>}
+                      <button className="kick-button" onClick={() => setKickTarget(member)} aria-label={`Kick ${member.display_name}`}><X /></button>
                     </>
-                  ) : <b>{member.role}</b>}
+                  ) : null}
                 </div>
               ))}
             </div>
             <button className="auth-submit" onClick={() => { setMembers(null); createInvite(); }}><UserPlus /> Invite another member</button>
+          </section>
+        </div>
+      ) : null}
+      {kickTarget ? (
+        <div className="invite-modal-backdrop confirmation-backdrop" onClick={() => setKickTarget(null)}>
+          <section className="invite-modal kick-confirmation" onClick={(event) => event.stopPropagation()}>
+            <div className="danger-icon"><X /></div>
+            <p className="auth-kicker">REMOVE MEMBER</p>
+            <h2>Kick {kickTarget.display_name}?</h2>
+            <p>Are you sure you want to remove <strong>{kickTarget.display_name}</strong> from {activeGroup.name}? They will lose access to the group immediately.</p>
+            <div className="confirmation-actions">
+              <button onClick={() => setKickTarget(null)}>Cancel</button>
+              <button onClick={() => updateMember(kickTarget.id, "remove")}>Yes, kick member</button>
+            </div>
           </section>
         </div>
       ) : null}

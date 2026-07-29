@@ -11,14 +11,14 @@ export async function POST(request: Request) {
     await ensureSchema();
     const query = sql();
     const rows = await query`
-      SELECT id, group_id FROM group_invites
+      SELECT id, group_id, invite_role FROM group_invites
       WHERE code = ${code} AND revoked = FALSE AND expires_at > NOW() AND uses < max_uses
       LIMIT 1
     `;
     if (!rows.length) return NextResponse.json({ error: "This invitation is invalid or expired." }, { status: 404 });
     await query`
       INSERT INTO group_members (group_id, user_id, role)
-      VALUES (${rows[0].group_id}, ${user.id}, 'member')
+      VALUES (${rows[0].group_id}, ${user.id}, ${rows[0].invite_role})
       ON CONFLICT (group_id, user_id) DO NOTHING
     `;
     await query`UPDATE group_invites SET uses = uses + 1 WHERE id = ${rows[0].id}`;

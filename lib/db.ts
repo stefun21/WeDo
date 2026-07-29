@@ -47,10 +47,12 @@ export async function ensureSchema() {
       expires_at TIMESTAMPTZ NOT NULL,
       max_uses INTEGER NOT NULL DEFAULT 20,
       uses INTEGER NOT NULL DEFAULT 0,
+      invite_role VARCHAR(12) NOT NULL DEFAULT 'member' CHECK (invite_role IN ('admin', 'member')),
       revoked BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await query`ALTER TABLE group_invites ADD COLUMN IF NOT EXISTS invite_role VARCHAR(12) NOT NULL DEFAULT 'member'`;
   await query`
     CREATE TABLE IF NOT EXISTS tasks (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
