@@ -58,6 +58,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   const [toast, setToast] = useState("");
   const [activeGroup, setActiveGroup] = useState(groups[0]);
   const [invite, setInvite] = useState("");
+  const [quickAdd, setQuickAdd] = useState(false);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -76,6 +77,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   };
 
   const createInvite = async () => {
+    setQuickAdd(false);
     const response = await fetch(`/api/groups/${activeGroup.id}/invites`, { method: "POST" });
     const data = await response.json();
     if (!response.ok) return notify(data.error || "Invite could not be created");
@@ -157,7 +159,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
                 <div className="avatar-stack hero-avatars"><i>{user.displayName.slice(0, 2).toUpperCase()}</i><i>AM</i><i>JD</i><i>+1</i></div>
               </div>
             </div>
-            <button className="primary-button" onClick={() => notify("Quick-add menu will open here")}>Add new <Plus /></button>
+            <button className="primary-button" onClick={() => setQuickAdd(true)}>Add new <Plus /></button>
           </section>
 
           <section className="overview-card">
@@ -230,6 +232,32 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
       </nav>
 
       {toast ? <div className="toast"><CheckCircle2 /> {toast}</div> : null}
+      {quickAdd ? (
+        <div className="invite-modal-backdrop" onClick={() => setQuickAdd(false)}>
+          <section className="invite-modal quick-add-modal" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setQuickAdd(false)}><X /></button>
+            <p className="auth-kicker">QUICK ADD</p>
+            <h2>What do you want to add?</h2>
+            <div className="quick-add-list">
+              <button onClick={createInvite}>
+                <i><UserPlus /></i>
+                <span><strong>Invite member</strong><small>Generate a private invitation code</small></span>
+                <b>→</b>
+              </button>
+              <button onClick={() => { setQuickAdd(false); notify("Task creator comes in Stage 4"); }}>
+                <i><ListTodo /></i>
+                <span><strong>Add task</strong><small>Available in the next stage</small></span>
+                <b>→</b>
+              </button>
+              <button onClick={() => { setQuickAdd(false); notify("Shopping editor comes in Stage 4"); }}>
+                <i><ShoppingCart /></i>
+                <span><strong>Add shopping item</strong><small>Available in the next stage</small></span>
+                <b>→</b>
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {invite ? (
         <div className="invite-modal-backdrop" onClick={() => setInvite("")}>
           <section className="invite-modal" onClick={(event) => event.stopPropagation()}>

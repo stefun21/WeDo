@@ -213,4 +213,10 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.08; letter-spa
 .invite-modal { position: relative; width: min(470px, 100%); padding: 38px; text-align: center; border: 1px solid var(--border); border-radius: 19px; background: linear-gradient(145deg, var(--surface-2), var(--surface)); box-shadow: 0 30px 90px rgba(0,0,0,.45); }
 .invite-modal h2 { margin: 0; font-size: 25px; }.invite-modal > p:not(.auth-kicker) { margin: 12px 0 23px; color: var(--muted); font-size: 13px; }.invite-modal .recovery-code { margin: 0; font-size: 19px; }
 .modal-close { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; }.modal-close svg { width: 17px; }
+.quick-add-modal { text-align: left; }.quick-add-modal > h2 { margin-bottom: 23px; }
+.quick-add-list { display: grid; gap: 10px; }
+.quick-add-list > button { width: 100%; min-height: 72px; padding: 12px 14px; display: grid; grid-template-columns: 44px 1fr 20px; align-items: center; gap: 13px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.018); text-align: left; cursor: pointer; transition: .18s ease; }
+.quick-add-list > button:hover { border-color: rgba(110,242,176,.48); background: rgba(110,242,176,.055); transform: translateX(2px); }
+.quick-add-list i { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; background: rgba(110,242,176,.1); color: var(--mint); }.quick-add-list i svg { width: 20px; }
+.quick-add-list span { display: grid; gap: 5px; }.quick-add-list strong { font-size: 13px; }.quick-add-list small { color: var(--muted); font-size: 11px; }.quick-add-list b { color: var(--mint); font-size: 18px; }
 @media (max-width: 620px) { .group-choice-grid { grid-template-columns: 1fr; }.group-choice-grid > button { min-height: 205px; }.group-setup-shell { padding: 21px 15px; } }
