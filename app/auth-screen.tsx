@@ -85,10 +85,17 @@ export default function AuthScreen() {
 
           <form onSubmit={submit}>
             {mode === "register" ? (
-              <label>
-                Display name
-                <span><UserRound /><input name="displayName" minLength={2} maxLength={40} placeholder="How others will see you" required /></span>
-              </label>
+              <>
+                <label>
+                  Display name
+                  <span><UserRound /><input name="displayName" minLength={2} maxLength={40} placeholder="How others will see you" required /></span>
+                </label>
+                <label>
+                  <span className="auth-label-line">Group invite code <small>Optional</small></span>
+                  <span><Users /><input className="invite-code-input" name="inviteCode" maxLength={14} placeholder="WEDO-XXXXXXXX" autoComplete="off" /></span>
+                  <small className="field-hint">Have an invite? You’ll join the group automatically.</small>
+                </label>
+              </>
             ) : null}
             <label>
               Username

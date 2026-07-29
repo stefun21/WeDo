@@ -217,6 +217,8 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.08; letter-spa
 .auth-helper { margin: 12px 0 30px; color: var(--muted); font-size: 14px; }
 .auth-form-wrap form { display: grid; gap: 18px; }
 .auth-form-wrap label { display: grid; gap: 8px; color: #ced6df; font-size: 12px; font-weight: 700; }
+.auth-label-line { height: auto !important; padding: 0 !important; display: flex !important; justify-content: space-between; border: 0 !important; background: transparent !important; }.auth-label-line small { padding: 3px 7px; border-radius: 6px; background: rgba(110,242,176,.08); color: var(--mint); font-size: 9px; text-transform: uppercase; letter-spacing: .5px; }
+.field-hint { margin-top: -2px; color: var(--muted); font-size: 10px; font-weight: 400; }.invite-code-input { text-transform: uppercase; letter-spacing: .5px; }
 .auth-form-wrap label > span { height: 50px; padding: 0 14px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); transition: .18s ease; }
 .auth-form-wrap label > span:focus-within { border-color: var(--mint); box-shadow: 0 0 0 3px rgba(110,242,176,.1); }
 .auth-form-wrap label svg { width: 18px; color: var(--muted); }
