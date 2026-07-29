@@ -119,4 +119,17 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await query`
+    CREATE TABLE IF NOT EXISTS group_activity (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      action VARCHAR(30) NOT NULL,
+      entity_type VARCHAR(20) NOT NULL,
+      entity_id UUID,
+      summary VARCHAR(220) NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await query`CREATE INDEX IF NOT EXISTS group_activity_group_created_idx ON group_activity (group_id, created_at DESC)`;
 }

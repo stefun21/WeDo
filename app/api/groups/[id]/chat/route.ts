@@ -66,15 +66,20 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     RETURNING id, body, created_at, user_id
   `;
   await query`
+    INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary)
+    VALUES (${id}, ${user.id}, 'sent', 'message', ${rows[0].id}, ${message.slice(0, 220)})
+  `;
+  await query`
     INSERT INTO message_reads (group_id, user_id, last_read_at)
     VALUES (${id}, ${user.id}, NOW())
     ON CONFLICT (group_id, user_id) DO UPDATE SET last_read_at = NOW()
   `;
-  await sendPushNotifications(id, user.id, user.displayName, message);
+  const mentionedUsernames = [...message.matchAll(/@([a-zA-Z0-9_-]+)/g)].map((match) => match[1].toLowerCase());
+  await sendPushNotifications(id, user.id, user.displayName, message, mentionedUsernames);
   return NextResponse.json({ message: { ...rows[0], display_name: user.displayName } }, { status: 201 });
 }
 
-async function sendPushNotifications(groupId: string, senderId: string, senderName: string, message: string) {
+async function sendPushNotifications(groupId: string, senderId: string, senderName: string, message: string, mentionedUsernames: string[]) {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!publicKey || !privateKey) return;
@@ -82,17 +87,23 @@ async function sendPushNotifications(groupId: string, senderId: string, senderNa
     webpush.setVapidDetails("mailto:notifications@wedo.app", publicKey, privateKey);
     const query = sql();
     const subscriptions = await query`
-      SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth
+      SELECT ps.id, ps.endpoint, ps.p256dh, ps.auth, u.username
       FROM push_subscriptions ps
       JOIN group_members gm ON gm.user_id = ps.user_id
+      JOIN users u ON u.id = ps.user_id
       WHERE gm.group_id = ${groupId} AND ps.user_id <> ${senderId}
     `;
     await Promise.allSettled(subscriptions.map(async (subscription) => {
       try {
+        const isMentioned = mentionedUsernames.includes(String(subscription.username).toLowerCase());
         await webpush.sendNotification({
           endpoint: String(subscription.endpoint),
           keys: { p256dh: String(subscription.p256dh), auth: String(subscription.auth) },
-        }, JSON.stringify({ title: `${senderName} in WeDo`, body: message.slice(0, 140), url: "/" }));
+        }, JSON.stringify({
+          title: isMentioned ? `${senderName} mentioned you` : `${senderName} in WeDo`,
+          body: message.slice(0, 140),
+          url: "/",
+        }));
       } catch (error: unknown) {
         const statusCode = typeof error === "object" && error && "statusCode" in error ? Number(error.statusCode) : 0;
         if (statusCode === 404 || statusCode === 410) await query`DELETE FROM push_subscriptions WHERE id = ${subscription.id}`;

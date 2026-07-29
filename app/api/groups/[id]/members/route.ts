@@ -31,6 +31,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const role = String(body.role || "");
   if (!["admin", "member"].includes(role)) return NextResponse.json({ error: "Invalid role." }, { status: 400 });
   await query`UPDATE group_members SET role = ${role} WHERE group_id = ${id} AND user_id = ${memberId} AND role <> 'owner'`;
+  const changed = await query`SELECT display_name FROM users WHERE id = ${memberId}`;
+  if (changed.length) await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary) VALUES (${id}, ${user.id}, 'changed role', 'member', ${memberId}, ${`${changed[0].display_name} · ${role}`})`;
   return NextResponse.json({ ok: true });
 }
 
@@ -43,6 +45,11 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const owner = await query`SELECT 1 FROM group_members WHERE group_id = ${id} AND user_id = ${user.id} AND role = 'owner'`;
   if (!owner.length) return NextResponse.json({ error: "Only the owner can remove members." }, { status: 403 });
   const memberId = new URL(request.url).searchParams.get("memberId") || "";
-  await query`DELETE FROM group_members WHERE group_id = ${id} AND user_id = ${memberId} AND role <> 'owner'`;
+  const removed = await query`
+    DELETE FROM group_members gm USING users u
+    WHERE gm.group_id = ${id} AND gm.user_id = ${memberId} AND gm.role <> 'owner' AND u.id = gm.user_id
+    RETURNING u.display_name
+  `;
+  if (removed.length) await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, summary) VALUES (${id}, ${user.id}, 'removed', 'member', ${removed[0].display_name})`;
   return NextResponse.json({ ok: true });
 }

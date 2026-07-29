@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Circle,
+  Clock3,
   Home,
   ListTodo,
   LogOut,
@@ -41,6 +42,7 @@ type ShoppingItem = { id: string; title: string; amount: string; done: boolean; 
 type ShoppingCategory = { id: string; name: string; color: string };
 type EditableItem = { type: "task"; item: Task } | { type: "shopping"; item: ShoppingItem };
 type Message = { id: string; body: string; createdAt: string; userId: string; displayName: string };
+type ActivityEntry = { id: string; action: string; entityType: string; summary: string; createdAt: string; userId: string; displayName: string };
 type Member = { id: string; username: string; display_name: string; role: "owner" | "admin" | "member"; joined_at: string };
 type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
@@ -84,6 +86,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [groupSwitcherOpen, setGroupSwitcherOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -197,10 +200,28 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     if (response.ok) setGroupMembers(data.members);
   }, [activeGroup.id]);
 
+  const loadActivity = useCallback(async () => {
+    const response = await fetch(`/api/groups/${activeGroup.id}/activity`, { cache: "no-store" });
+    const data = await response.json();
+    if (response.ok) {
+      setActivity(data.activity.map((entry: { id: string; action: string; entity_type: string; summary: string; created_at: string; user_id: string; display_name: string }) => ({
+        id: entry.id, action: entry.action, entityType: entry.entity_type, summary: entry.summary,
+        createdAt: entry.created_at, userId: entry.user_id, displayName: entry.display_name,
+      })));
+    }
+  }, [activeGroup.id]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadGroupMembers();
   }, [loadGroupMembers]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadActivity();
+    const timer = window.setInterval(() => void loadActivity(), 12000);
+    return () => window.clearInterval(timer);
+  }, [loadActivity]);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -234,6 +255,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
       body: JSON.stringify({ type, itemId, completed }),
     });
     if (!response.ok) { notify("The change could not be saved"); loadWorkspace(); }
+    else void loadActivity();
   };
 
   const addWorkspaceItem = async (event: FormEvent<HTMLFormElement>) => {
@@ -249,6 +271,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     setEditor(null);
     notify(editor === "task" ? "Task added" : "Shopping item added");
     loadWorkspace();
+    loadActivity();
   };
 
   const saveItemEdit = async (event: FormEvent<HTMLFormElement>) => {
@@ -264,6 +287,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     setEditingItem(null);
     notify("Changes saved");
     void loadWorkspace();
+    void loadActivity();
   };
 
   const changeQuantity = async (item: ShoppingItem, delta: number) => {
@@ -323,6 +347,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     setGroupSwitcherOpen(false);
     setMessages([]);
     setUnreadCount(0);
+    setActivity([]);
   };
 
   const applyUpdate = async () => {
@@ -340,7 +365,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),
     });
-    if (response.ok) { form.reset(); setChatDraft(""); await loadChat(true); }
+    if (response.ok) { form.reset(); setChatDraft(""); await Promise.all([loadChat(true), loadActivity()]); }
     else { const data = await response.json(); notify(data.error || "Message could not be sent"); }
     setSendingMessage(false);
   };
@@ -535,6 +560,18 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             <button className="primary-button" onClick={contextualAdd}>{active === "Tasks" ? "Add task" : active === "Shopping" ? "Add item" : active === "Chat" ? "Invite" : "Add new"} <Plus /></button>
           </section>
 
+          {active === "Overview" ? <section className="activity-strip" aria-label="Recent group activity">
+            <header><span><Clock3 /><strong>Recent activity</strong></span><small>Live collaboration</small></header>
+            <div>
+              {activity.slice(0, 3).map((entry) => <button key={entry.id} onClick={() => navigate(entry.entityType === "task" ? "Tasks" : entry.entityType === "shopping" || entry.entityType === "folder" ? "Shopping" : entry.entityType === "message" ? "Chat" : "Overview")}>
+                <i>{entry.displayName.slice(0, 2).toUpperCase()}</i>
+                <span><strong>{entry.displayName} {entry.action}</strong><small>{entry.summary}</small></span>
+                <time>{relativeTime(entry.createdAt)}</time>
+              </button>)}
+              {!activity.length ? <p>Activity will appear here as your group works together.</p> : null}
+            </div>
+          </section> : null}
+
           <section className={`card-grid ${active !== "Overview" ? "single-module" : ""}`}>
             {active === "Overview" || active === "Tasks" ? <article className="module-card" id="tasks">
               {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Tasks" onClick={() => navigate("Tasks")} /> : null}
@@ -595,6 +632,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                     name={message.displayName}
                     time={new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     message={message.body}
+                    currentUsername={user.username}
                   />
                 ))}
               </div>
@@ -688,7 +726,10 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                 {editor === "task" ? "Task title" : "Item name"}
                 <input name={editor === "task" ? "title" : "name"} maxLength={180} autoFocus placeholder={editor === "task" ? "e.g. Pay the electricity bill" : "e.g. Milk"} required />
               </label>
-              {editor === "task" ? <label>Due date <input type="date" name="dueDate" /></label> : <><label>Quantity <input name="quantity" maxLength={30} placeholder="e.g. 2" /></label><label>Folder<select name="categoryId" defaultValue={activeCategory} required><option value="" disabled>Select a folder</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></>}
+              {editor === "task" ? <>
+                <label>Due date <input type="date" name="dueDate" /></label>
+                <label>Assigned to<select name="assignedTo" defaultValue=""><option value="">Unassigned</option>{groupMembers.map((member) => <option value={member.id} key={member.id}>{member.display_name}{member.id === user.id ? " (you)" : ""}</option>)}</select></label>
+              </> : <><label>Quantity <input name="quantity" maxLength={30} placeholder="e.g. 2" /></label><label>Folder<select name="categoryId" defaultValue={activeCategory} required><option value="" disabled>Select a folder</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></>}
               <button className="auth-submit">Add to {activeGroup.name} <Plus /></button>
             </form>
           </section>
@@ -806,8 +847,17 @@ function ListPager({ page, pages, setPage }: { page: number; pages: number; setP
   return <div className="list-pager"><button disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>←</button><span>{page + 1} / {pages}</span><button disabled={page >= pages - 1} onClick={() => setPage((value) => Math.min(pages - 1, value + 1))}>→</button></div>;
 }
 
-function ChatMessage({ initials, name, time, message }: { initials: string; name: string; time: string; message: string }) {
-  return <div className="chat-message"><i className="chat-avatar">{initials}</i><div><div><strong>{name}</strong><time><span />{time}</time></div><p>{message}</p></div></div>;
+function ChatMessage({ initials, name, time, message, currentUsername }: { initials: string; name: string; time: string; message: string; currentUsername: string }) {
+  const parts = message.split(/(@[a-zA-Z0-9_-]+)/g);
+  return <div className={`chat-message ${message.toLowerCase().includes(`@${currentUsername.toLowerCase()}`) ? "mentioned" : ""}`}><i className="chat-avatar">{initials}</i><div><div><strong>{name}</strong><time><span />{time}</time></div><p>{parts.map((part, index) => part.startsWith("@") ? <mark key={`${part}-${index}`}>{part}</mark> : part)}</p></div></div>;
+}
+
+function relativeTime(value: string) {
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  if (seconds < 60) return "now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
 }
 
 function urlBase64ToUint8Array(value: string) {

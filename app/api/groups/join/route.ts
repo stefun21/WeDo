@@ -16,12 +16,19 @@ export async function POST(request: Request) {
       LIMIT 1
     `;
     if (!rows.length) return NextResponse.json({ error: "This invitation is invalid or expired." }, { status: 404 });
-    await query`
+    const joined = await query`
       INSERT INTO group_members (group_id, user_id, role)
       VALUES (${rows[0].group_id}, ${user.id}, ${rows[0].invite_role})
       ON CONFLICT (group_id, user_id) DO NOTHING
+      RETURNING group_id
     `;
-    await query`UPDATE group_invites SET uses = uses + 1 WHERE id = ${rows[0].id}`;
+    if (joined.length) {
+      await query`UPDATE group_invites SET uses = uses + 1 WHERE id = ${rows[0].id}`;
+      await query`
+        INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary)
+        VALUES (${rows[0].group_id}, ${user.id}, 'joined', 'member', ${user.id}, ${user.displayName})
+      `;
+    }
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Join group error", error);

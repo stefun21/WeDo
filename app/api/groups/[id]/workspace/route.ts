@@ -43,10 +43,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const title = String(body.title || "").trim();
     if (!title || title.length > 180) return NextResponse.json({ error: "Task title must contain 1–180 characters." }, { status: 400 });
     const dueDate = body.dueDate ? String(body.dueDate) : null;
+    const assignedTo = body.assignedTo ? String(body.assignedTo) : null;
+    if (assignedTo) {
+      const assignee = await query`SELECT 1 FROM group_members WHERE group_id = ${id} AND user_id = ${assignedTo}`;
+      if (!assignee.length) return NextResponse.json({ error: "The selected person is not in this group." }, { status: 400 });
+    }
     const rows = await query`
-      INSERT INTO tasks (group_id, title, created_by, due_date)
-      VALUES (${id}, ${title}, ${user.id}, ${dueDate}) RETURNING id
+      INSERT INTO tasks (group_id, title, created_by, due_date, assigned_to)
+      VALUES (${id}, ${title}, ${user.id}, ${dueDate}, ${assignedTo}) RETURNING id
     `;
+    await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary) VALUES (${id}, ${user.id}, 'created', 'task', ${rows[0].id}, ${title})`;
     return NextResponse.json({ ok: true, id: rows[0].id }, { status: 201 });
   }
   if (body.type === "shopping") {
@@ -61,6 +67,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       INSERT INTO shopping_items (group_id, name, quantity, created_by, category_id)
       VALUES (${id}, ${name}, ${quantity}, ${user.id}, ${categoryId}) RETURNING id
     `;
+    await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary) VALUES (${id}, ${user.id}, 'created', 'shopping', ${rows[0].id}, ${name})`;
     return NextResponse.json({ ok: true, id: rows[0].id }, { status: 201 });
   }
   if (body.type === "category") {
@@ -69,6 +76,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const duplicate = await query`SELECT 1 FROM shopping_categories WHERE group_id = ${id} AND LOWER(name) = LOWER(${name})`;
     if (duplicate.length) return NextResponse.json({ error: "A folder with this name already exists." }, { status: 409 });
     const rows = await query`INSERT INTO shopping_categories (group_id, name, created_by) VALUES (${id}, ${name}, ${user.id}) RETURNING id`;
+    await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary) VALUES (${id}, ${user.id}, 'created', 'folder', ${rows[0].id}, ${name})`;
     return NextResponse.json({ ok: true, id: rows[0].id }, { status: 201 });
   }
   return NextResponse.json({ error: "Invalid item type." }, { status: 400 });
@@ -92,6 +100,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       if (!assignee.length) return NextResponse.json({ error: "The selected person is not in this group." }, { status: 400 });
     }
     await query`UPDATE tasks SET title = ${title}, due_date = ${dueDate}, assigned_to = ${assignedTo}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
+    await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary) VALUES (${id}, ${user.id}, 'updated', 'task', ${itemId}, ${title})`;
   } else if (body.action === "edit" && body.type === "shopping") {
     const name = String(body.name || "").trim();
     const quantity = String(body.quantity || "").trim().slice(0, 30) || null;
@@ -101,14 +110,21 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const category = await query`SELECT 1 FROM shopping_categories WHERE id = ${categoryId} AND group_id = ${id}`;
     if (!category.length) return NextResponse.json({ error: "This folder does not belong to the active group." }, { status: 400 });
     await query`UPDATE shopping_items SET name = ${name}, quantity = ${quantity}, category_id = ${categoryId}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
+    await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary) VALUES (${id}, ${user.id}, 'updated', 'shopping', ${itemId}, ${name})`;
   } else if (body.action === "edit" && body.type === "category") {
     const name = String(body.name || "").trim();
     if (!name || name.length > 40) return NextResponse.json({ error: "Folder name must contain 1–40 characters." }, { status: 400 });
     const duplicate = await query`SELECT 1 FROM shopping_categories WHERE group_id = ${id} AND LOWER(name) = LOWER(${name}) AND id <> ${itemId}`;
     if (duplicate.length) return NextResponse.json({ error: "A folder with this name already exists." }, { status: 409 });
     await query`UPDATE shopping_categories SET name = ${name}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
-  } else if (body.type === "task") await query`UPDATE tasks SET completed = ${Boolean(body.completed)}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
-  else if (body.type === "shopping") await query`UPDATE shopping_items SET completed = ${Boolean(body.completed)}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
+  } else if (body.type === "task") {
+    const rows = await query`UPDATE tasks SET completed = ${Boolean(body.completed)}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id} RETURNING title`;
+    if (rows.length) await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary) VALUES (${id}, ${user.id}, ${Boolean(body.completed) ? "completed" : "reopened"}, 'task', ${itemId}, ${rows[0].title})`;
+  }
+  else if (body.type === "shopping") {
+    const rows = await query`UPDATE shopping_items SET completed = ${Boolean(body.completed)}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id} RETURNING name`;
+    if (rows.length) await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, entity_id, summary) VALUES (${id}, ${user.id}, ${Boolean(body.completed) ? "completed" : "reopened"}, 'shopping', ${itemId}, ${rows[0].name})`;
+  }
   else return NextResponse.json({ error: "Invalid item type." }, { status: 400 });
   return NextResponse.json({ ok: true });
 }
@@ -122,8 +138,14 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const type = url.searchParams.get("type");
   const itemId = url.searchParams.get("itemId") || "";
   const query = sql();
-  if (type === "task") await query`DELETE FROM tasks WHERE id = ${itemId} AND group_id = ${id}`;
-  else if (type === "shopping") await query`DELETE FROM shopping_items WHERE id = ${itemId} AND group_id = ${id}`;
+  if (type === "task") {
+    const rows = await query`DELETE FROM tasks WHERE id = ${itemId} AND group_id = ${id} RETURNING title`;
+    if (rows.length) await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, summary) VALUES (${id}, ${user.id}, 'deleted', 'task', ${rows[0].title})`;
+  }
+  else if (type === "shopping") {
+    const rows = await query`DELETE FROM shopping_items WHERE id = ${itemId} AND group_id = ${id} RETURNING name`;
+    if (rows.length) await query`INSERT INTO group_activity (group_id, user_id, action, entity_type, summary) VALUES (${id}, ${user.id}, 'deleted', 'shopping', ${rows[0].name})`;
+  }
   else if (type === "category") {
     const moveTo = url.searchParams.get("moveTo") || "";
     const itemCount = await query`SELECT COUNT(*)::int AS count FROM shopping_items WHERE group_id = ${id} AND category_id = ${itemId}`;
