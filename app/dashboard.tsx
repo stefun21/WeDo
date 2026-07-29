@@ -8,6 +8,7 @@ import {
   Circle,
   Home,
   ListTodo,
+  LogOut,
   Menu,
   MessageCircle,
   MoreHorizontal,
@@ -57,6 +58,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   const [online, setOnline] = useState(true);
   const [members, setMembers] = useState<Member[] | null>(null);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -205,7 +207,6 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   };
 
   const navigate = async (label: string) => {
-    setActive(label);
     setMenuOpen(false);
     if (label === "Members") {
       const response = await fetch(`/api/groups/${activeGroup.id}/members`, { cache: "no-store" });
@@ -214,8 +215,8 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
       else notify(data.error || "Members could not be loaded");
       return;
     }
-    const target = label === "Overview" ? "dashboard-top" : label.toLowerCase();
-    document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActive(label);
+    document.getElementById("dashboard-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const updateMember = async (memberId: string, action: "role" | "remove", role?: "admin" | "member") => {
@@ -295,10 +296,29 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
           <button className="icon-button notification-button" aria-label="Notifications" onClick={enableNotifications}>
             <Bell />{messages.length ? <span>{Math.min(messages.length, 9)}</span> : null}
           </button>
-          <button className="profile-button" onClick={logout} title="Log out">
-            <b>{user.displayName.slice(0, 2).toUpperCase()}</b>
-            <span>{user.displayName}</span><ChevronDown />
-          </button>
+          <div className="profile-menu">
+            <button
+              className={`profile-button ${profileOpen ? "open" : ""}`}
+              onClick={() => setProfileOpen((current) => !current)}
+              aria-expanded={profileOpen}
+              aria-haspopup="menu"
+            >
+              <b>{user.displayName.slice(0, 2).toUpperCase()}</b>
+              <span>{user.displayName}</span><ChevronDown />
+            </button>
+            {profileOpen ? (
+              <>
+                <button className="profile-dismiss" aria-label="Close profile menu" onClick={() => setProfileOpen(false)} />
+                <div className="profile-dropdown" role="menu">
+                  <div className="profile-summary">
+                    <b>{user.displayName.slice(0, 2).toUpperCase()}</b>
+                    <span><strong>{user.displayName}</strong><small>@{user.username}</small></span>
+                  </div>
+                  <button role="menuitem" onClick={logout}><LogOut /> Log out</button>
+                </div>
+              </>
+            ) : null}
+          </div>
         </header>
 
         {!online ? <div className="offline-banner"><WifiOff /> You’re offline — showing saved data</div> : null}
@@ -317,17 +337,17 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             <button className="primary-button" onClick={() => setQuickAdd(true)}>Add new <Plus /></button>
           </section>
 
-          <section className="overview-card">
+          {active === "Overview" ? <section className="overview-card">
             <div className="overview-heading"><h2>Overview</h2><button><MoreHorizontal /></button></div>
             <div className="metrics">
               <Metric icon={<CheckCircle2 />} color="mint" value={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} progress={tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : 0} />
               <Metric icon={<ShoppingCart />} color="lime" value={`${shopping.length} items`} progress={72} />
               <Metric icon={<MessageCircle />} color="cyan" value={`${messages.length} messages`} progress={messages.length ? 65 : 0} />
             </div>
-          </section>
+          </section> : null}
 
-          <section className="card-grid">
-            <article className="module-card" id="tasks">
+          <section className={`card-grid ${active !== "Overview" ? "single-module" : ""}`}>
+            {active === "Overview" || active === "Tasks" ? <article className="module-card" id="tasks">
               <CardHeader title="Tasks" detail={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} />
               <div className="thin-progress"><span style={{ width: `${tasks.length ? tasks.filter((task) => task.done).length / tasks.length * 100 : 0}%` }} /></div>
               <div className="rows">
@@ -346,9 +366,9 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
                 ))}
               </div>
               <button className="add-link mint-text" onClick={() => setEditor("task")}><Plus /> Add task</button>
-            </article>
+            </article> : null}
 
-            <article className="module-card" id="shopping">
+            {active === "Overview" || active === "Shopping" ? <article className="module-card" id="shopping">
               <CardHeader title="Shopping" detail={`${shopping.length} items`} />
               <div className="thin-progress lime-progress"><span style={{ width: "72%" }} /></div>
               <div className="rows">
@@ -366,9 +386,9 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
                 ))}
               </div>
               <button className="add-link lime-text" onClick={() => setEditor("shopping")}><Plus /> Add item</button>
-            </article>
+            </article> : null}
 
-            <article className="module-card chat-card" id="chat">
+            {active === "Overview" || active === "Chat" ? <article className="module-card chat-card" id="chat">
               <CardHeader title="Chat" detail={`${messages.length} messages`} />
               <div className="chat-list live-chat-list">
                 {!messages.length ? <p className="empty-list">No messages yet. Say hello!</p> : null}
@@ -386,14 +406,14 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
                 <input name="message" maxLength={2000} placeholder={`Message ${activeGroup.name}`} aria-label="Chat message" autoComplete="off" />
                 <button disabled={sendingMessage} aria-label="Send message">↑</button>
               </form>
-            </article>
+            </article> : null}
           </section>
         </div>
       </section>
 
       <nav className="bottom-nav" aria-label="Mobile navigation">
         {navItems.slice(0, 4).map(({ label, icon: Icon, badge }) => (
-          <button key={label} className={active === label ? "active" : ""} onClick={() => setActive(label)}>
+          <button key={label} className={active === label ? "active" : ""} onClick={() => navigate(label)}>
             <span><Icon />{badge ? <small>{badge}</small> : null}</span>{label}
           </button>
         ))}
