@@ -28,7 +28,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 const navItems = [
   { label: "Overview", icon: Home },
@@ -87,6 +87,9 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [syncStatus, setSyncStatus] = useState<"syncing" | "saved" | "offline">("syncing");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const chatListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -119,9 +122,29 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   }, [menuOpen]);
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (event.key === "Escape") {
+        setProfileOpen(false);
+        setNotificationOpen(false);
+        setGroupSwitcherOpen(false);
+        setQuickAdd(false);
+        setEditor(null);
+        setEditingItem(null);
+        setFolderManager(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
     const initialStatus = window.setTimeout(() => setOnline(navigator.onLine), 0);
-    const onOnline = () => setOnline(true);
-    const onOffline = () => setOnline(false);
+    const onOnline = () => { setOnline(true); setSyncStatus("syncing"); };
+    const onOffline = () => { setOnline(false); setSyncStatus("offline"); };
     const onInstall = (event: Event) => { event.preventDefault(); setInstallPrompt(event as InstallPromptEvent); };
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
@@ -140,6 +163,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   }, []);
 
   const loadWorkspace = useCallback(async () => {
+    if (navigator.onLine) setSyncStatus("syncing");
     const response = await fetch(`/api/groups/${activeGroup.id}/workspace`, { cache: "no-store" });
     const data = await response.json();
     if (response.ok) {
@@ -155,6 +179,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
       })));
       setCategories(data.categories || []);
       localStorage.setItem(`wedo-workspace-${activeGroup.id}`, JSON.stringify(data));
+      setSyncStatus("saved");
     } else {
       const cached = localStorage.getItem(`wedo-workspace-${activeGroup.id}`);
       if (cached) {
@@ -193,6 +218,20 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     const timer = window.setInterval(() => void loadChat(active === "Chat"), 5000);
     return () => window.clearInterval(timer);
   }, [loadChat, active]);
+
+  useEffect(() => {
+    const savedDraft = localStorage.getItem(`wedo-draft-${activeGroup.id}`) || "";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setChatDraft(savedDraft);
+  }, [activeGroup.id]);
+
+  useEffect(() => {
+    localStorage.setItem(`wedo-draft-${activeGroup.id}`, chatDraft);
+  }, [chatDraft, activeGroup.id]);
+
+  useEffect(() => {
+    if (active === "Chat") chatListRef.current?.scrollTo({ top: chatListRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, active]);
 
   const loadGroupMembers = useCallback(async () => {
     const response = await fetch(`/api/groups/${activeGroup.id}/members`, { cache: "no-store" });
@@ -248,6 +287,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   };
 
   const toggleItem = async (type: "task" | "shopping", itemId: string, completed: boolean) => {
+    setSyncStatus("syncing");
     if (type === "task") setTasks((all) => all.map((item) => item.id === itemId ? { ...item, done: completed } : item));
     else setShopping((all) => all.map((item) => item.id === itemId ? { ...item, done: completed } : item));
     const response = await fetch(`/api/groups/${activeGroup.id}/workspace`, {
@@ -255,19 +295,21 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
       body: JSON.stringify({ type, itemId, completed }),
     });
     if (!response.ok) { notify("The change could not be saved"); loadWorkspace(); }
-    else void loadActivity();
+    else { setSyncStatus("saved"); void loadActivity(); }
   };
 
   const addWorkspaceItem = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editor) return;
+    setSyncStatus("syncing");
     const form = new FormData(event.currentTarget);
     const response = await fetch(`/api/groups/${activeGroup.id}/workspace`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: editor, ...Object.fromEntries(form.entries()) }),
     });
     const data = await response.json();
-    if (!response.ok) return notify(data.error || "Could not save the item");
+    if (!response.ok) { setSyncStatus(online ? "saved" : "offline"); return notify(data.error || "Could not save the item"); }
+    setSyncStatus("saved");
     setEditor(null);
     notify(editor === "task" ? "Task added" : "Shopping item added");
     loadWorkspace();
@@ -510,7 +552,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
           <button className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu /></button>
           <label className="search">
             <Search />
-            <input aria-label="Search WeDo" placeholder="Search WeDo..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+            <input ref={searchInputRef} aria-label="Search WeDo" placeholder="Search WeDo..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
             <kbd>⌘ K</kbd>
           </label>
           <button className="icon-button notification-button" aria-label="Notifications" onClick={() => setNotificationOpen((value) => !value)}>
@@ -555,7 +597,8 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
           <section className="welcome-row">
             <div>
               <p className="eyebrow"><Sparkles /> YOUR SHARED SPACE</p>
-              <h1>Good evening, {user.displayName}</h1>
+              <h1>{greeting()}, {user.displayName}</h1>
+              <div className={`sync-pill ${syncStatus}`} role="status"><span />{syncStatus === "syncing" ? "Syncing changes…" : syncStatus === "offline" ? "Offline mode" : "Everything is saved"}</div>
             </div>
             <button className="primary-button" onClick={contextualAdd}>{active === "Tasks" ? "Add task" : active === "Shopping" ? "Add item" : active === "Chat" ? "Invite" : "Add new"} <Plus /></button>
           </section>
@@ -578,13 +621,14 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               <CardHeader title="Tasks" detail={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} />
               <div className="thin-progress"><span style={{ width: `${tasks.length ? tasks.filter((task) => task.done).length / tasks.length * 100 : 0}%` }} /></div>
               <div className="rows">
+                {workspaceLoading ? <LoadingRows /> : null}
                 {!workspaceLoading && !tasks.length ? <p className="empty-list">No tasks yet. Add the first one.</p> : null}
                 {visibleTasks.map((task) => (
                   <div className={`item-row pro-row ${task.done ? "completed" : ""}`} key={task.id}>
                     <button className="row-check-button" onClick={() => toggleItem("task", task.id, !task.done)} aria-label={task.done ? "Mark task incomplete" : "Complete task"}><span className="check">{task.done ? <Check /> : <Circle />}</span></button>
                     <span className="item-name">{task.title}</span>
                     <i className="mini-avatar">{task.person}</i>
-                    <time>{task.when}</time>
+                    <time className={task.dueDate && !task.done && task.dueDate < new Date().toISOString().slice(0, 10) ? "overdue" : ""}>{task.when}</time>
                     <div className="row-actions"><button onClick={() => setEditingItem({ type: "task", item: task })} aria-label="Edit task"><Pencil /></button><button className="danger-action" onClick={() => setDeleteTarget({ type: "task", item: task })} aria-label="Delete task"><Trash2 /></button></div>
                   </div>
                 ))}
@@ -623,7 +667,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             {active === "Overview" || active === "Chat" ? <article className="module-card chat-card" id="chat">
               {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Chat" onClick={() => navigate("Chat")} /> : null}
               <CardHeader title="Chat" detail={`${messages.length} messages`} />
-              <div className="chat-list live-chat-list">
+              <div className="chat-list live-chat-list" ref={chatListRef}>
                 {!messages.length ? <p className="empty-list">No messages yet. Say hello!</p> : null}
                 {filteredMessages.slice(-4).map((message) => (
                   <ChatMessage
@@ -659,7 +703,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
         ))}
       </nav>
 
-      {toast ? <div className="toast"><CheckCircle2 /> {toast}</div> : null}
+      {toast ? <div className="toast" role="status" aria-live="polite"><CheckCircle2 /> {toast}</div> : null}
       {quickAdd ? (
         <div className="invite-modal-backdrop" onClick={() => setQuickAdd(false)}>
           <section className="invite-modal quick-add-modal" onClick={(event) => event.stopPropagation()}>
@@ -847,9 +891,20 @@ function ListPager({ page, pages, setPage }: { page: number; pages: number; setP
   return <div className="list-pager"><button disabled={page === 0} onClick={() => setPage((value) => Math.max(0, value - 1))}>←</button><span>{page + 1} / {pages}</span><button disabled={page >= pages - 1} onClick={() => setPage((value) => Math.min(pages - 1, value + 1))}>→</button></div>;
 }
 
+function LoadingRows() {
+  return <div className="loading-rows" aria-label="Loading items">{[0, 1, 2].map((item) => <span key={item}><i /><b /></span>)}</div>;
+}
+
 function ChatMessage({ initials, name, time, message, currentUsername }: { initials: string; name: string; time: string; message: string; currentUsername: string }) {
   const parts = message.split(/(@[a-zA-Z0-9_-]+)/g);
   return <div className={`chat-message ${message.toLowerCase().includes(`@${currentUsername.toLowerCase()}`) ? "mentioned" : ""}`}><i className="chat-avatar">{initials}</i><div><div><strong>{name}</strong><time><span />{time}</time></div><p>{parts.map((part, index) => part.startsWith("@") ? <mark key={`${part}-${index}`}>{part}</mark> : part)}</p></div></div>;
+}
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
 }
 
 function relativeTime(value: string) {
