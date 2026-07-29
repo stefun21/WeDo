@@ -402,9 +402,9 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
           {active === "Overview" ? <section className="overview-card">
             <div className="overview-heading"><h2>Overview</h2><button><MoreHorizontal /></button></div>
             <div className="metrics">
-              <Metric icon={<CheckCircle2 />} color="mint" value={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} progress={tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : 0} />
-              <Metric icon={<ShoppingCart />} color="lime" value={`${shopping.filter((item) => item.done).length} of ${shopping.length} bought`} progress={shopping.length ? Math.round(shopping.filter((item) => item.done).length / shopping.length * 100) : 0} showProgress={shopping.length > 0} />
-              <div className={`metric cyan latest-message ${latestMessage && latestMessage.userId !== user.id && unreadCount > 0 ? "unread" : "read"}`}>
+              <Metric onOpen={() => navigate("Tasks")} icon={<CheckCircle2 />} color="mint" value={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} progress={tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : 0} />
+              <Metric onOpen={() => navigate("Shopping")} icon={<ShoppingCart />} color="lime" value={`${shopping.filter((item) => item.done).length} of ${shopping.length} bought`} progress={shopping.length ? Math.round(shopping.filter((item) => item.done).length / shopping.length * 100) : 0} showProgress={shopping.length > 0} />
+              <div className={`metric cyan latest-message metric-link ${latestMessage && latestMessage.userId !== user.id && unreadCount > 0 ? "unread" : "read"}`} role="button" tabIndex={0} onClick={() => navigate("Chat")} onKeyDown={(event) => event.key === "Enter" && navigate("Chat")}>
                 <div className="metric-icon"><MessageCircle /></div>
                 <div><strong>{latestMessage ? `${latestMessage.displayName}: ${latestMessage.body}` : "No messages yet"}</strong><small>{latestMessage ? new Date(latestMessage.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Start the conversation"}</small></div>
               </div>
@@ -413,7 +413,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
 
           <section className={`card-grid ${active !== "Overview" ? "single-module" : ""}`}>
             {active === "Overview" || active === "Tasks" ? <article className="module-card" id="tasks">
-              <CardHeader title="Tasks" detail={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} />
+              <CardHeader title="Tasks" detail={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} onOpen={() => navigate("Tasks")} />
               <div className="thin-progress"><span style={{ width: `${tasks.length ? tasks.filter((task) => task.done).length / tasks.length * 100 : 0}%` }} /></div>
               <div className="rows">
                 {!workspaceLoading && !tasks.length ? <p className="empty-list">No tasks yet. Add the first one.</p> : null}
@@ -435,7 +435,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             </article> : null}
 
             {active === "Overview" || active === "Shopping" ? <article className="module-card" id="shopping">
-              <CardHeader title="Shopping" detail={`${shopping.length} items`} />
+              <CardHeader title="Shopping" detail={`${shopping.length} items`} onOpen={() => navigate("Shopping")} />
               {shopping.length > 0 ? <div className="thin-progress lime-progress"><span style={{ width: `${Math.round(shopping.filter((item) => item.done).length / shopping.length * 100)}%` }} /></div> : null}
               <div className="rows">
                 {!workspaceLoading && !shopping.length ? <p className="empty-list">Your shopping list is empty.</p> : null}
@@ -456,7 +456,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             </article> : null}
 
             {active === "Overview" || active === "Chat" ? <article className="module-card chat-card" id="chat">
-              <CardHeader title="Chat" detail={`${messages.length} messages`} />
+              <CardHeader title="Chat" detail={`${messages.length} messages`} onOpen={() => navigate("Chat")} />
               <div className="chat-list live-chat-list">
                 {!messages.length ? <p className="empty-list">No messages yet. Say hello!</p> : null}
                 {filteredMessages.slice(-4).map((message) => (
@@ -605,12 +605,12 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   );
 }
 
-function Metric({ icon, color, value, progress, showProgress = true }: { icon: React.ReactNode; color: string; value: string; progress: number; showProgress?: boolean }) {
-  return <div className={`metric ${color}`}><div className="metric-icon">{icon}</div><div><strong>{value}</strong>{showProgress ? <div className="progress"><span style={{ width: `${progress}%` }} /></div> : null}</div></div>;
+function Metric({ icon, color, value, progress, showProgress = true, onOpen }: { icon: React.ReactNode; color: string; value: string; progress: number; showProgress?: boolean; onOpen?: () => void }) {
+  return <div className={`metric ${color} ${onOpen ? "metric-link" : ""}`} role={onOpen ? "button" : undefined} tabIndex={onOpen ? 0 : undefined} onClick={onOpen} onKeyDown={(event) => event.key === "Enter" && onOpen?.()}><div className="metric-icon">{icon}</div><div><strong>{value}</strong>{showProgress ? <div className="progress"><span style={{ width: `${progress}%` }} /></div> : null}</div></div>;
 }
 
-function CardHeader({ title, detail }: { title: string; detail: string }) {
-  return <header className="card-header"><div><h2>{title}</h2><p>{detail}</p></div><button>View all</button></header>;
+function CardHeader({ title, detail, onOpen }: { title: string; detail: string; onOpen: () => void }) {
+  return <header className="card-header"><button className="card-title-link" onClick={onOpen}><h2>{title}</h2><p>{detail}</p></button><button onClick={onOpen}>View all</button></header>;
 }
 
 function ListPager({ page, pages, setPage }: { page: number; pages: number; setPage: React.Dispatch<React.SetStateAction<number>> }) {

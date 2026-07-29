@@ -105,6 +105,7 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.08; letter-spa
 .metric-icon { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 50%; color: #06100d; }
 .metric-icon svg { width: 21px; }.metric.mint .metric-icon { background: var(--mint); }.metric.lime .metric-icon { background: var(--lime); }.metric.cyan .metric-icon { background: var(--cyan); }
 .metric strong { display: block; margin-bottom: 11px; font-size: 14px; }
+.metric-link { border-radius: 10px; cursor: pointer; transition: background .18s ease, transform .18s ease; }.metric-link:hover { background: rgba(255,255,255,.025); transform: translateY(-1px); }.metric-link:focus-visible { outline: 2px solid var(--mint); outline-offset: 3px; }
 .latest-message strong { max-width: 220px; margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.latest-message small { color: var(--muted); font-size: 10px; }.latest-message.read strong { color: #788696; font-weight: 500; }.latest-message.unread strong { color: var(--text); }
 .progress { width: 100%; height: 6px; overflow: hidden; border-radius: 9px; background: #273442; }
 .progress span { height: 100%; display: block; border-radius: inherit; background: var(--mint); }.lime .progress span { background: var(--lime); }.cyan .progress span { background: var(--cyan); }
@@ -118,6 +119,7 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 48px); line-height: 1.08; letter-spa
 .card-header { display: flex; justify-content: space-between; align-items: start; }
 .card-header h2 { margin: 0 0 6px; font-size: 22px; letter-spacing: -.5px; }.card-header p { margin: 0; color: var(--muted); font-size: 13px; }
 .card-header button { padding: 7px 12px; border: 1px solid #344455; border-radius: 8px; background: transparent; color: #d1d8e1; font-size: 12px; cursor: pointer; }
+.card-header .card-title-link { padding: 0; border: 0; border-radius: 5px; text-align: left; }.card-header .card-title-link:hover h2 { color: var(--mint); }
 .thin-progress { height: 5px; margin: 16px 0 10px; border-radius: 8px; background: #273441; overflow: hidden; }
 .thin-progress span { height: 100%; display: block; border-radius: inherit; background: var(--mint); transition: width .35s ease; }.lime-progress span { background: var(--lime); }
 .rows { display: grid; }
