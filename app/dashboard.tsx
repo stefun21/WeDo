@@ -52,7 +52,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [tasks, setTasks] = useState<Task[]>([]);
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [toast, setToast] = useState("");
-  const [activeGroup] = useState(groups[0]);
+  const [activeGroup, setActiveGroup] = useState(groups[0]);
   const [invite, setInvite] = useState("");
   const [quickAdd, setQuickAdd] = useState(false);
   const [editor, setEditor] = useState<"task" | "shopping" | null>(null);
@@ -79,10 +79,26 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [activeCategory, setActiveCategory] = useState("");
   const [folderManager, setFolderManager] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ShoppingCategory | null>(null);
+  const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<ShoppingCategory | null>(null);
+  const [categoryMoveTarget, setCategoryMoveTarget] = useState("");
+  const [groupSwitcherOpen, setGroupSwitcherOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+      navigator.serviceWorker.register("/sw.js").then((registration) => {
+        if (registration.waiting) setUpdateReady(true);
+        registration.addEventListener("updatefound", () => {
+          const worker = registration.installing;
+          worker?.addEventListener("statechange", () => {
+            if (worker.state === "installed" && navigator.serviceWorker.controller) setUpdateReady(true);
+          });
+        });
+      }).catch(() => undefined);
+      const reload = () => window.location.reload();
+      navigator.serviceWorker.addEventListener("controllerchange", reload);
+      return () => navigator.serviceWorker.removeEventListener("controllerchange", reload);
     }
   }, []);
 
@@ -284,12 +300,34 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     void loadWorkspace();
   };
 
-  const deleteCategory = async (category: ShoppingCategory) => {
-    const response = await fetch(`/api/groups/${activeGroup.id}/workspace?type=category&itemId=${category.id}`, { method: "DELETE" });
+  const deleteCategory = async () => {
+    if (!categoryDeleteTarget) return;
+    const count = shopping.filter((item) => item.categoryId === categoryDeleteTarget.id).length;
+    if (count > 0 && !categoryMoveTarget) return notify("Choose where to move the items first");
+    const response = await fetch(`/api/groups/${activeGroup.id}/workspace?type=category&itemId=${categoryDeleteTarget.id}${categoryMoveTarget ? `&moveTo=${categoryMoveTarget}` : ""}`, { method: "DELETE" });
     if (!response.ok) return notify("Could not delete folder");
-    if (activeCategory === category.id) setActiveCategory("all");
-    notify("Folder deleted — its items are still safe");
+    if (activeCategory === categoryDeleteTarget.id) setActiveCategory("");
+    setCategoryDeleteTarget(null);
+    setCategoryMoveTarget("");
+    notify("Folder deleted — all items are safe");
     void loadWorkspace();
+  };
+
+  const switchGroup = (group: Group) => {
+    setActiveGroup(group);
+    setActive("Overview");
+    setActiveCategory("");
+    setTaskPage(0);
+    setShoppingPage(0);
+    setWorkspaceLoading(true);
+    setGroupSwitcherOpen(false);
+    setMessages([]);
+    setUnreadCount(0);
+  };
+
+  const applyUpdate = async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
   };
 
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
@@ -419,6 +457,15 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
         </nav>
 
         <section className="workspace-card">
+          <div className="group-switcher">
+            <button className="group-switcher-button" onClick={() => setGroupSwitcherOpen((value) => !value)} aria-expanded={groupSwitcherOpen}>
+              <span><Home /></span><span><strong>{activeGroup.name}</strong><small>{activeGroup.role}</small></span><ChevronDown />
+            </button>
+            {groupSwitcherOpen ? <div className="group-switcher-menu">
+              <p>YOUR GROUPS</p>
+              {groups.map((group) => <button key={group.id} className={group.id === activeGroup.id ? "active" : ""} onClick={() => switchGroup(group)}><Home /><span><strong>{group.name}</strong><small>{group.memberCount} members · {group.role}</small></span>{group.id === activeGroup.id ? <Check /> : null}</button>)}
+            </div> : null}
+          </div>
           <button className="sidebar-members-button" onClick={showMembers}>
             <span><Users /></span>
             <span><strong>Members</strong><small>{groupMembers.length} in this group</small></span>
@@ -441,9 +488,17 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             <input aria-label="Search WeDo" placeholder="Search WeDo..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
             <kbd>⌘ K</kbd>
           </label>
-          <button className="icon-button notification-button" aria-label="Notifications" onClick={enableNotifications}>
+          <button className="icon-button notification-button" aria-label="Notifications" onClick={() => setNotificationOpen((value) => !value)}>
             <Bell />{unreadCount > 0 ? <span>{Math.min(unreadCount, 9)}</span> : null}
           </button>
+          {notificationOpen ? <div className="notification-center">
+            <header><div><strong>Notifications</strong><small>{unreadCount ? `${unreadCount} unread` : "You're all caught up"}</small></div><button onClick={() => setNotificationOpen(false)}><X /></button></header>
+            <div className="notification-list">
+              {messages.filter((message) => message.userId !== user.id).slice(-3).reverse().map((message) => <button key={message.id} onClick={() => { setNotificationOpen(false); navigate("Chat"); }}><i>{message.displayName.slice(0, 2).toUpperCase()}</i><span><strong>{message.displayName}</strong><small>{message.body}</small></span></button>)}
+              {!messages.some((message) => message.userId !== user.id) ? <p>No new activity yet.</p> : null}
+            </div>
+            <footer><button onClick={enableNotifications}><Bell /> Enable push notifications</button><button onClick={() => { setNotificationOpen(false); navigate("Chat"); }}>Open Chat →</button></footer>
+          </div> : null}
           <div className="profile-menu">
             <button
               className={`profile-button ${profileOpen ? "open" : ""}`}
@@ -470,6 +525,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
         </header>
 
         {!online ? <div className="offline-banner"><WifiOff /> You’re offline — showing saved data</div> : null}
+        {updateReady ? <div className="update-banner"><span><Sparkles /><strong>A new WeDo version is ready</strong></span><button onClick={applyUpdate}>Update now</button><button onClick={() => setUpdateReady(false)} aria-label="Dismiss update"><X /></button></div> : null}
         <div className={`dashboard dashboard-${active.toLowerCase()}`} id="dashboard-top">
           <section className="welcome-row">
             <div>
@@ -667,8 +723,23 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               <button>{editingCategory ? "Save" : "Create"} <Plus /></button>
             </form>
             <div className="folder-manager-list">
-              {!categories.length ? <p className="empty-list">No folders yet. Create your first one.</p> : categories.map((category) => <div key={category.id}><Folder /><span><strong>{category.name}</strong><small>{shopping.filter((item) => item.categoryId === category.id).length} items</small></span><button onClick={() => setEditingCategory(category)} aria-label={`Rename ${category.name}`}><Pencil /></button><button className="danger-action" onClick={() => deleteCategory(category)} aria-label={`Delete ${category.name}`}><Trash2 /></button></div>)}
+              {!categories.length ? <p className="empty-list">No folders yet. Create your first one.</p> : categories.map((category) => <div key={category.id}><Folder /><span><strong>{category.name}</strong><small>{shopping.filter((item) => item.categoryId === category.id).length} items</small></span><button onClick={() => setEditingCategory(category)} aria-label={`Rename ${category.name}`}><Pencil /></button><button className="danger-action" onClick={() => { setCategoryDeleteTarget(category); setCategoryMoveTarget(""); }} aria-label={`Delete ${category.name}`}><Trash2 /></button></div>)}
             </div>
+          </section>
+        </div>
+      ) : null}
+      {categoryDeleteTarget ? (
+        <div className="invite-modal-backdrop" onClick={() => setCategoryDeleteTarget(null)}>
+          <section className="invite-modal safe-folder-delete" onClick={(event) => event.stopPropagation()}>
+            <div className="danger-icon"><Folder /></div>
+            <p className="auth-kicker">SAFE FOLDER DELETE</p>
+            <h2>Delete “{categoryDeleteTarget.name}”?</h2>
+            {shopping.some((item) => item.categoryId === categoryDeleteTarget.id) ? <>
+              <p>Choose where to move its {shopping.filter((item) => item.categoryId === categoryDeleteTarget.id).length} items. Nothing will be lost.</p>
+              <label>Move items to<select value={categoryMoveTarget} onChange={(event) => setCategoryMoveTarget(event.target.value)}><option value="">Select destination</option>{categories.filter((category) => category.id !== categoryDeleteTarget.id).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+              {categories.length < 2 ? <div className="auth-error">Create another folder before deleting this one.</div> : null}
+            </> : <p>This folder is empty and can be safely removed.</p>}
+            <div className="confirmation-actions"><button onClick={() => setCategoryDeleteTarget(null)}>Cancel</button><button disabled={shopping.some((item) => item.categoryId === categoryDeleteTarget.id) && !categoryMoveTarget} onClick={deleteCategory}>Move items & delete</button></div>
           </section>
         </div>
       ) : null}
