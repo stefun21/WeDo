@@ -316,15 +316,11 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
         </nav>
 
         <section className="workspace-card">
-          <div className="workspace-title">
-            <div className="workspace-icon"><Home /></div>
-            <div><strong>{activeGroup.name}</strong><span>{activeGroup.memberCount} {activeGroup.memberCount === 1 ? "member" : "members"}</span></div>
-            <ChevronDown />
-          </div>
-          <div className="avatar-stack" aria-label="Group members">
-            {groupMembers.slice(0, 4).map((member) => <i key={member.id} title={member.display_name}>{member.display_name.slice(0, 2).toUpperCase()}</i>)}
-            {groupMembers.length > 4 ? <i>+{groupMembers.length - 4}</i> : null}
-          </div>
+          <button className="sidebar-members-button" onClick={showMembers}>
+            <span><Users /></span>
+            <span><strong>Members</strong><small>{groupMembers.length} in this group</small></span>
+            <b>{groupMembers.length}</b>
+          </button>
           <button className="invite-button" onClick={createInvite}>
             <UserPlus /> Invite member
           </button>
@@ -380,10 +376,6 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                 <button className="group-select members-trigger" onClick={showMembers}>
                   <Users /> Members <span>{groupMembers.length}</span>
                 </button>
-                <div className="avatar-stack hero-avatars">
-                  {groupMembers.slice(0, 4).map((member) => <i key={member.id} title={member.display_name}>{member.display_name.slice(0, 2).toUpperCase()}</i>)}
-                  {groupMembers.length > 4 ? <i>+{groupMembers.length - 4}</i> : null}
-                </div>
               </div>
             </div>
             <button className="primary-button" onClick={() => setQuickAdd(true)}>Add new <Plus /></button>
