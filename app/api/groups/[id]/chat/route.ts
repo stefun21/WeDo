@@ -59,7 +59,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     VALUES (${id}, ${user.id}, NOW())
     ON CONFLICT (group_id, user_id) DO UPDATE SET last_read_at = NOW()
   `;
-  void sendPushNotifications(id, user.id, user.displayName, message);
+  await sendPushNotifications(id, user.id, user.displayName, message);
   return NextResponse.json({ message: { ...rows[0], display_name: user.displayName } }, { status: 201 });
 }
 

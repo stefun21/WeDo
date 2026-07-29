@@ -1,9 +1,9 @@
-# WeDo — Stage 5/6
+# WeDo — Final (Stage 6/6)
 
 Aplicație PWA colaborativă pentru grupuri, construită cu Next.js, TypeScript,
-Tailwind CSS și PostgreSQL. Stage 5 adaugă chat persistent și notificări Web Push.
+Tailwind CSS și PostgreSQL. Stage 6 finalizează experiența PWA și administrarea grupurilor.
 
-## Ce funcționează în Stage 5
+## Ce funcționează în versiunea finală
 
 - design responsive pentru PC și mobil;
 - navigație desktop și mobilă;
@@ -44,6 +44,16 @@ Tailwind CSS și PostgreSQL. Stage 5 adaugă chat persistent și notificări Web
 - abonament separat pentru fiecare dispozitiv;
 - eliminarea automată a abonamentelor expirate;
 - suport Android, desktop și PWA instalat pe iPhone.
+- navigație funcțională către Tasks, Shopping, Chat și Members;
+- căutare în task-uri, cumpărături și mesaje;
+- promovarea membrilor la Admin;
+- retrogradarea Adminilor la Member;
+- eliminarea membrilor de către Owner;
+- cache local pentru afișarea datelor când conexiunea cade;
+- indicator vizibil pentru modul offline;
+- buton de instalare PWA;
+- interfață optimizată pentru PC, Android și iPhone;
+- stări goale, validări și mesaje de eroare prietenoase.
 
 ## Pornire locală
 
@@ -91,11 +101,11 @@ git push -u origin main
 
 ## Actualizarea proiectului pe GitHub
 
-1. Dezarhivează ZIP-ul Stage 5.
+1. Dezarhivează ZIP-ul final.
 2. Deschide repository-ul `wedo` pe GitHub.
 3. Șterge fișierele vechi sau înlocuiește-le cu toate fișierele din noul ZIP.
 4. Verifică să existe direct la rădăcină `app`, `lib`, `public` și `package.json`.
-5. Salvează cu mesajul `WeDo Stage 5`.
+5. Salvează cu mesajul `WeDo Final`.
 
 ## Activarea notificărilor Web Push
 

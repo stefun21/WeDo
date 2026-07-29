@@ -2,7 +2,6 @@
 
 import {
   Bell,
-  CalendarDays,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -14,11 +13,13 @@ import {
   MoreHorizontal,
   Plus,
   Search,
-  Settings,
   ShoppingCart,
   Sparkles,
   UserPlus,
   Users,
+  WifiOff,
+  Download,
+  Trash2,
   X,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
@@ -28,14 +29,14 @@ const navItems = [
   { label: "Tasks", icon: ListTodo },
   { label: "Shopping", icon: ShoppingCart },
   { label: "Chat", icon: MessageCircle, badge: 3 },
-  { label: "Calendar", icon: CalendarDays },
   { label: "Members", icon: Users },
-  { label: "Settings", icon: Settings },
 ];
 
 type Task = { id: string; title: string; done: boolean; person: string; when: string };
 type ShoppingItem = { id: string; title: string; amount: string; done: boolean };
 type Message = { id: string; body: string; createdAt: string; userId: string; displayName: string };
+type Member = { id: string; username: string; display_name: string; role: "owner" | "admin" | "member"; joined_at: string };
+type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
 type Group = { id: string; name: string; role: "owner" | "admin" | "member"; memberCount: number };
 
@@ -52,11 +53,31 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [online, setOnline] = useState(true);
+  const [members, setMembers] = useState<Member[] | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
+  }, []);
+
+  useEffect(() => {
+    const initialStatus = window.setTimeout(() => setOnline(navigator.onLine), 0);
+    const onOnline = () => setOnline(true);
+    const onOffline = () => setOnline(false);
+    const onInstall = (event: Event) => { event.preventDefault(); setInstallPrompt(event as InstallPromptEvent); };
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("beforeinstallprompt", onInstall);
+    return () => {
+      window.clearTimeout(initialStatus);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("beforeinstallprompt", onInstall);
+    };
   }, []);
 
   const notify = useCallback((message: string) => {
@@ -76,7 +97,15 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
       setShopping(data.shopping.map((item: { id: string; name: string; quantity?: string; completed: boolean }) => ({
         id: item.id, title: item.name, amount: item.quantity || "", done: item.completed,
       })));
-    } else notify(data.error || "Could not load this group");
+      localStorage.setItem(`wedo-workspace-${activeGroup.id}`, JSON.stringify(data));
+    } else {
+      const cached = localStorage.getItem(`wedo-workspace-${activeGroup.id}`);
+      if (cached) {
+        const stored = JSON.parse(cached);
+        setTasks(stored.tasks.map((task: { id: string; title: string; completed: boolean; assigned_name?: string; due_date?: string }) => ({ id: task.id, title: task.title, done: task.completed, person: task.assigned_name?.slice(0, 1).toUpperCase() || user.displayName.slice(0, 1).toUpperCase(), when: task.due_date ? new Date(task.due_date).toLocaleDateString() : "" })));
+        setShopping(stored.shopping.map((item: { id: string; name: string; quantity?: string; completed: boolean }) => ({ id: item.id, title: item.name, amount: item.quantity || "", done: item.completed })));
+      } else notify("Could not load this group");
+    }
     setWorkspaceLoading(false);
   }, [activeGroup.id, user.displayName, notify]);
 
@@ -92,6 +121,10 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
         id: message.id, body: message.body, createdAt: message.created_at,
         userId: message.user_id, displayName: message.display_name,
       })));
+      localStorage.setItem(`wedo-chat-${activeGroup.id}`, JSON.stringify(data.messages));
+    } else {
+      const cached = localStorage.getItem(`wedo-chat-${activeGroup.id}`);
+      if (cached) setMessages(JSON.parse(cached).map((message: { id: string; body: string; created_at: string; user_id: string; display_name: string }) => ({ id: message.id, body: message.body, createdAt: message.created_at, userId: message.user_id, displayName: message.display_name })));
     }
   }, [activeGroup.id]);
 
@@ -171,6 +204,43 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
     notify(response.ok ? "Notifications enabled" : "Notifications could not be enabled");
   };
 
+  const navigate = async (label: string) => {
+    setActive(label);
+    setMenuOpen(false);
+    if (label === "Members") {
+      const response = await fetch(`/api/groups/${activeGroup.id}/members`, { cache: "no-store" });
+      const data = await response.json();
+      if (response.ok) setMembers(data.members);
+      else notify(data.error || "Members could not be loaded");
+      return;
+    }
+    const target = label === "Overview" ? "dashboard-top" : label.toLowerCase();
+    document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const updateMember = async (memberId: string, action: "role" | "remove", role?: "admin" | "member") => {
+    const endpoint = `/api/groups/${activeGroup.id}/members${action === "remove" ? `?memberId=${memberId}` : ""}`;
+    const response = await fetch(endpoint, {
+      method: action === "remove" ? "DELETE" : "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: action === "role" ? JSON.stringify({ memberId, role }) : undefined,
+    });
+    if (!response.ok) { const data = await response.json(); return notify(data.error || "Member could not be updated"); }
+    setMembers((current) => current ? current.filter((entry) => action !== "remove" || entry.id !== memberId).map((entry) => entry.id === memberId && role ? { ...entry, role } : entry) : null);
+    notify(action === "remove" ? "Member removed" : "Role updated");
+  };
+
+  const installApp = async () => {
+    if (!installPrompt) return notify("Use your browser menu and choose Install app");
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  };
+
+  const filteredTasks = tasks.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredShopping = shopping.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredMessages = messages.filter((item) => `${item.displayName} ${item.body}`.toLowerCase().includes(searchQuery.toLowerCase()));
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}>
@@ -187,11 +257,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             <button
               key={label}
               className={active === label ? "nav-item active" : "nav-item"}
-              onClick={() => {
-                setActive(label);
-                setMenuOpen(false);
-                if (label !== "Overview") notify(`${label} will be connected in the next stages`);
-              }}
+              onClick={() => navigate(label)}
             >
               <Icon />
               <span>{label}</span>
@@ -212,6 +278,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
           <button className="invite-button" onClick={createInvite}>
             <UserPlus /> Invite member
           </button>
+          <button className="invite-button install-button" onClick={installApp}><Download /> Install WeDo</button>
         </section>
       </aside>
 
@@ -222,7 +289,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
           <button className="mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open menu"><Menu /></button>
           <label className="search">
             <Search />
-            <input aria-label="Search WeDo" placeholder="Search WeDo..." />
+            <input aria-label="Search WeDo" placeholder="Search WeDo..." value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
             <kbd>⌘ K</kbd>
           </label>
           <button className="icon-button notification-button" aria-label="Notifications" onClick={enableNotifications}>
@@ -234,7 +301,8 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
           </button>
         </header>
 
-        <div className="dashboard">
+        {!online ? <div className="offline-banner"><WifiOff /> You’re offline — showing saved data</div> : null}
+        <div className="dashboard" id="dashboard-top">
           <section className="welcome-row">
             <div>
               <p className="eyebrow"><Sparkles /> YOUR SHARED SPACE</p>
@@ -259,12 +327,12 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
           </section>
 
           <section className="card-grid">
-            <article className="module-card">
+            <article className="module-card" id="tasks">
               <CardHeader title="Tasks" detail={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} />
               <div className="thin-progress"><span style={{ width: `${tasks.length ? tasks.filter((task) => task.done).length / tasks.length * 100 : 0}%` }} /></div>
               <div className="rows">
                 {!workspaceLoading && !tasks.length ? <p className="empty-list">No tasks yet. Add the first one.</p> : null}
-                {tasks.map((task) => (
+                {filteredTasks.map((task) => (
                   <button
                     className={`item-row ${task.done ? "completed" : ""}`}
                     key={task.id}
@@ -280,12 +348,12 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
               <button className="add-link mint-text" onClick={() => setEditor("task")}><Plus /> Add task</button>
             </article>
 
-            <article className="module-card">
+            <article className="module-card" id="shopping">
               <CardHeader title="Shopping" detail={`${shopping.length} items`} />
               <div className="thin-progress lime-progress"><span style={{ width: "72%" }} /></div>
               <div className="rows">
                 {!workspaceLoading && !shopping.length ? <p className="empty-list">Your shopping list is empty.</p> : null}
-                {shopping.map((item) => (
+                {filteredShopping.map((item) => (
                   <button
                     className={`item-row ${item.done ? "completed" : ""}`}
                     key={item.id}
@@ -300,11 +368,11 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
               <button className="add-link lime-text" onClick={() => setEditor("shopping")}><Plus /> Add item</button>
             </article>
 
-            <article className="module-card chat-card">
+            <article className="module-card chat-card" id="chat">
               <CardHeader title="Chat" detail={`${messages.length} messages`} />
               <div className="chat-list live-chat-list">
                 {!messages.length ? <p className="empty-list">No messages yet. Say hello!</p> : null}
-                {messages.slice(-4).map((message) => (
+                {filteredMessages.slice(-4).map((message) => (
                   <ChatMessage
                     key={message.id}
                     initials={message.displayName.slice(0, 2).toUpperCase()}
@@ -386,6 +454,30 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
               {editor === "task" ? <label>Due date <input type="date" name="dueDate" /></label> : <label>Quantity <input name="quantity" maxLength={30} placeholder="e.g. 2 or 1 kg" /></label>}
               <button className="auth-submit">Add to {activeGroup.name} <Plus /></button>
             </form>
+          </section>
+        </div>
+      ) : null}
+      {members ? (
+        <div className="invite-modal-backdrop" onClick={() => setMembers(null)}>
+          <section className="invite-modal members-modal" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => setMembers(null)}><X /></button>
+            <p className="auth-kicker">{activeGroup.name.toUpperCase()}</p>
+            <h2>Group members</h2>
+            <div className="members-list">
+              {members.map((member) => (
+                <div className="member-row" key={member.id}>
+                  <i>{member.display_name.slice(0, 2).toUpperCase()}</i>
+                  <span><strong>{member.display_name}</strong><small>@{member.username}</small></span>
+                  {activeGroup.role === "owner" && member.role !== "owner" ? (
+                    <>
+                      <select value={member.role} onChange={(event) => updateMember(member.id, "role", event.target.value as "admin" | "member")}><option value="member">Member</option><option value="admin">Admin</option></select>
+                      <button onClick={() => updateMember(member.id, "remove")} aria-label={`Remove ${member.display_name}`}><Trash2 /></button>
+                    </>
+                  ) : <b>{member.role}</b>}
+                </div>
+              ))}
+            </div>
+            <button className="auth-submit" onClick={() => { setMembers(null); createInvite(); }}><UserPlus /> Invite another member</button>
           </section>
         </div>
       ) : null}
