@@ -18,5 +18,5 @@ export default async function HomePage() {
     return <GroupSetup displayName={user.displayName} />;
   }
 
-  return <Dashboard user={{ username: user.username, displayName: user.displayName }} groups={groups} />;
+  return <Dashboard user={{ id: user.id, username: user.username, displayName: user.displayName }} groups={groups} />;
 }

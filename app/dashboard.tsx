@@ -29,7 +29,7 @@ const navItems = [
   { label: "Overview", icon: Home },
   { label: "Tasks", icon: ListTodo },
   { label: "Shopping", icon: ShoppingCart },
-  { label: "Chat", icon: MessageCircle, badge: 3 },
+  { label: "Chat", icon: MessageCircle },
   { label: "Members", icon: Users },
 ];
 
@@ -41,7 +41,7 @@ type InstallPromptEvent = Event & { prompt: () => Promise<void>; userChoice: Pro
 
 type Group = { id: string; name: string; role: "owner" | "admin" | "member"; memberCount: number };
 
-export default function Dashboard({ user, groups }: { user: { username: string; displayName: string }; groups: Group[] }) {
+export default function Dashboard({ user, groups }: { user: { id: string; username: string; displayName: string }; groups: Group[] }) {
   const [active, setActive] = useState("Overview");
   const [menuOpen, setMenuOpen] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -57,8 +57,12 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   const [searchQuery, setSearchQuery] = useState("");
   const [online, setOnline] = useState(true);
   const [members, setMembers] = useState<Member[] | null>(null);
+  const [groupMembers, setGroupMembers] = useState<Member[]>([]);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [chatDraft, setChatDraft] = useState("");
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -115,14 +119,15 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
 
-  const loadChat = useCallback(async () => {
-    const response = await fetch(`/api/groups/${activeGroup.id}/chat`, { cache: "no-store" });
+  const loadChat = useCallback(async (markRead = false) => {
+    const response = await fetch(`/api/groups/${activeGroup.id}/chat${markRead ? "?markRead=1" : ""}`, { cache: "no-store" });
     const data = await response.json();
     if (response.ok) {
       setMessages(data.messages.map((message: { id: string; body: string; created_at: string; user_id: string; display_name: string }) => ({
         id: message.id, body: message.body, createdAt: message.created_at,
         userId: message.user_id, displayName: message.display_name,
       })));
+      setUnreadCount(Number(data.unreadCount || 0));
       localStorage.setItem(`wedo-chat-${activeGroup.id}`, JSON.stringify(data.messages));
     } else {
       const cached = localStorage.getItem(`wedo-chat-${activeGroup.id}`);
@@ -132,10 +137,21 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadChat();
-    const timer = window.setInterval(() => void loadChat(), 5000);
+    void loadChat(active === "Chat");
+    const timer = window.setInterval(() => void loadChat(active === "Chat"), 5000);
     return () => window.clearInterval(timer);
-  }, [loadChat]);
+  }, [loadChat, active]);
+
+  const loadGroupMembers = useCallback(async () => {
+    const response = await fetch(`/api/groups/${activeGroup.id}/members`, { cache: "no-store" });
+    const data = await response.json();
+    if (response.ok) setGroupMembers(data.members);
+  }, [activeGroup.id]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadGroupMembers();
+  }, [loadGroupMembers]);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -178,15 +194,14 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   const sendMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
-    const input = new FormData(form).get("message");
-    const message = String(input || "").trim();
+    const message = chatDraft.trim();
     if (!message || sendingMessage) return;
     setSendingMessage(true);
     const response = await fetch(`/api/groups/${activeGroup.id}/chat`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),
     });
-    if (response.ok) { form.reset(); await loadChat(); }
+    if (response.ok) { form.reset(); setChatDraft(""); await loadChat(true); }
     else { const data = await response.json(); notify(data.error || "Message could not be sent"); }
     setSendingMessage(false);
   };
@@ -216,6 +231,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
       return;
     }
     setActive(label);
+    if (label === "Chat") void loadChat(true);
     document.getElementById("dashboard-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
@@ -241,6 +257,22 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
   const filteredTasks = tasks.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredShopping = shopping.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredMessages = messages.filter((item) => `${item.displayName} ${item.body}`.toLowerCase().includes(searchQuery.toLowerCase()));
+  const latestMessage = messages.at(-1);
+  const mentionMatch = chatDraft.match(/@([a-zA-Z0-9_-]*)$/);
+  const mentionSuggestions = mentionMatch
+    ? groupMembers.filter((member) => member.id !== user.id && member.username.toLowerCase().startsWith(mentionMatch[1].toLowerCase())).slice(0, 5)
+    : [];
+
+  const selectMention = (username: string) => {
+    setChatDraft((current) => current.replace(/@([a-zA-Z0-9_-]*)$/, `@${username} `));
+  };
+
+  const selectGroup = (group: Group) => {
+    setActiveGroup(group);
+    setGroupMenuOpen(false);
+    setActive("Overview");
+    setWorkspaceLoading(true);
+  };
 
   return (
     <main className="app-shell">
@@ -254,7 +286,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
         </div>
 
         <nav className="side-nav" aria-label="Main navigation">
-          {navItems.map(({ label, icon: Icon, badge }) => (
+          {navItems.map(({ label, icon: Icon }) => (
             <button
               key={label}
               className={active === label ? "nav-item active" : "nav-item"}
@@ -262,7 +294,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             >
               <Icon />
               <span>{label}</span>
-              {badge ? <small>{badge}</small> : null}
+              {label === "Chat" && unreadCount > 0 ? <small>{Math.min(unreadCount, 99)}</small> : null}
             </button>
           ))}
         </nav>
@@ -274,7 +306,8 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             <ChevronDown />
           </div>
           <div className="avatar-stack" aria-label="Group members">
-            <i>SF</i><i>AM</i><i>JD</i><i>+1</i>
+            {groupMembers.slice(0, 4).map((member) => <i key={member.id} title={member.display_name}>{member.display_name.slice(0, 2).toUpperCase()}</i>)}
+            {groupMembers.length > 4 ? <i>+{groupMembers.length - 4}</i> : null}
           </div>
           <button className="invite-button" onClick={createInvite}>
             <UserPlus /> Invite member
@@ -294,7 +327,7 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             <kbd>⌘ K</kbd>
           </label>
           <button className="icon-button notification-button" aria-label="Notifications" onClick={enableNotifications}>
-            <Bell />{messages.length ? <span>{Math.min(messages.length, 9)}</span> : null}
+            <Bell />{unreadCount > 0 ? <span>{Math.min(unreadCount, 9)}</span> : null}
           </button>
           <div className="profile-menu">
             <button
@@ -328,10 +361,20 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
               <p className="eyebrow"><Sparkles /> YOUR SHARED SPACE</p>
               <h1>Good evening, {user.displayName}</h1>
               <div className="group-line">
-                <button className="group-select" onClick={() => groups.length > 1 && setActiveGroup(groups[(groups.indexOf(activeGroup) + 1) % groups.length])}>
-                  <Home /> {activeGroup.name} <ChevronDown />
-                </button>
-                <div className="avatar-stack hero-avatars"><i>{user.displayName.slice(0, 2).toUpperCase()}</i><i>AM</i><i>JD</i><i>+1</i></div>
+                <div className="group-picker">
+                  <button className={`group-select ${groupMenuOpen ? "open" : ""}`} onClick={() => setGroupMenuOpen((current) => !current)} aria-expanded={groupMenuOpen}>
+                    <Home /> {activeGroup.name} <ChevronDown />
+                  </button>
+                  {groupMenuOpen ? <div className="group-dropdown">
+                    {groups.map((group) => <button key={group.id} className={group.id === activeGroup.id ? "active" : ""} onClick={() => selectGroup(group)}>
+                      <Home /><span><strong>{group.name}</strong><small>{group.memberCount} {group.memberCount === 1 ? "member" : "members"}</small></span>{group.id === activeGroup.id ? <Check /> : null}
+                    </button>)}
+                  </div> : null}
+                </div>
+                <div className="avatar-stack hero-avatars">
+                  {groupMembers.slice(0, 4).map((member) => <i key={member.id} title={member.display_name}>{member.display_name.slice(0, 2).toUpperCase()}</i>)}
+                  {groupMembers.length > 4 ? <i>+{groupMembers.length - 4}</i> : null}
+                </div>
               </div>
             </div>
             <button className="primary-button" onClick={() => setQuickAdd(true)}>Add new <Plus /></button>
@@ -341,8 +384,11 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
             <div className="overview-heading"><h2>Overview</h2><button><MoreHorizontal /></button></div>
             <div className="metrics">
               <Metric icon={<CheckCircle2 />} color="mint" value={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} progress={tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : 0} />
-              <Metric icon={<ShoppingCart />} color="lime" value={`${shopping.length} items`} progress={72} />
-              <Metric icon={<MessageCircle />} color="cyan" value={`${messages.length} messages`} progress={messages.length ? 65 : 0} />
+              <Metric icon={<ShoppingCart />} color="lime" value={`${shopping.filter((item) => item.done).length} of ${shopping.length} bought`} progress={shopping.length ? Math.round(shopping.filter((item) => item.done).length / shopping.length * 100) : 0} />
+              <div className={`metric cyan latest-message ${latestMessage && latestMessage.userId !== user.id && unreadCount > 0 ? "unread" : "read"}`}>
+                <div className="metric-icon"><MessageCircle /></div>
+                <div><strong>{latestMessage ? `${latestMessage.displayName}: ${latestMessage.body}` : "No messages yet"}</strong><small>{latestMessage ? new Date(latestMessage.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Start the conversation"}</small></div>
+              </div>
             </div>
           </section> : null}
 
@@ -403,7 +449,10 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
                 ))}
               </div>
               <form className="chat-compose" onSubmit={sendMessage}>
-                <input name="message" maxLength={2000} placeholder={`Message ${activeGroup.name}`} aria-label="Chat message" autoComplete="off" />
+                {mentionSuggestions.length ? <div className="mention-suggestions">
+                  {mentionSuggestions.map((member) => <button type="button" key={member.id} onClick={() => selectMention(member.username)}><i>{member.display_name.slice(0, 2).toUpperCase()}</i><span><strong>{member.display_name}</strong><small>@{member.username}</small></span></button>)}
+                </div> : null}
+                <input name="message" value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} maxLength={2000} placeholder={`Message ${activeGroup.name}`} aria-label="Chat message" autoComplete="off" />
                 <button disabled={sendingMessage} aria-label="Send message">↑</button>
               </form>
             </article> : null}
@@ -412,9 +461,9 @@ export default function Dashboard({ user, groups }: { user: { username: string; 
       </section>
 
       <nav className="bottom-nav" aria-label="Mobile navigation">
-        {navItems.slice(0, 4).map(({ label, icon: Icon, badge }) => (
+        {navItems.slice(0, 4).map(({ label, icon: Icon }) => (
           <button key={label} className={active === label ? "active" : ""} onClick={() => navigate(label)}>
-            <span><Icon />{badge ? <small>{badge}</small> : null}</span>{label}
+            <span><Icon />{label === "Chat" && unreadCount > 0 ? <small>{Math.min(unreadCount, 99)}</small> : null}</span>{label}
           </button>
         ))}
       </nav>

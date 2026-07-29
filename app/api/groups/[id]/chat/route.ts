@@ -17,6 +17,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (!(await member(id, user.id))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const url = new URL(request.url);
   const after = url.searchParams.get("after");
+  const markRead = url.searchParams.get("markRead") === "1";
   const query = sql();
   const messages = after
     ? await query`
@@ -32,12 +33,22 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
           WHERE m.group_id = ${id} ORDER BY m.created_at DESC LIMIT 60
         ) recent ORDER BY created_at ASC
       `;
-  await query`
-    INSERT INTO message_reads (group_id, user_id, last_read_at)
-    VALUES (${id}, ${user.id}, NOW())
-    ON CONFLICT (group_id, user_id) DO UPDATE SET last_read_at = NOW()
+  const unreadRows = await query`
+    SELECT COUNT(*)::int AS unread_count
+    FROM messages m
+    LEFT JOIN message_reads mr ON mr.group_id = m.group_id AND mr.user_id = ${user.id}
+    WHERE m.group_id = ${id}
+      AND m.user_id <> ${user.id}
+      AND m.created_at > COALESCE(mr.last_read_at, to_timestamp(0))
   `;
-  return NextResponse.json({ messages });
+  if (markRead) {
+    await query`
+      INSERT INTO message_reads (group_id, user_id, last_read_at)
+      VALUES (${id}, ${user.id}, NOW())
+      ON CONFLICT (group_id, user_id) DO UPDATE SET last_read_at = NOW()
+    `;
+  }
+  return NextResponse.json({ messages, unreadCount: markRead ? 0 : Number(unreadRows[0]?.unread_count || 0) });
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
