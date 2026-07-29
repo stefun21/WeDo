@@ -58,7 +58,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!(await member(id, user.id))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const body = await request.json();
   const message = String(body.message || "").trim();
-  if (!message || message.length > 2000) return NextResponse.json({ error: "Message must contain 1–2000 characters." }, { status: 400 });
+  if (!message || message.length > 500) return NextResponse.json({ error: "Message must contain 1–500 characters." }, { status: 400 });
   const query = sql();
   const rows = await query`
     INSERT INTO messages (group_id, user_id, body)

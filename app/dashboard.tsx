@@ -442,7 +442,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
           <section className={`card-grid ${active !== "Overview" ? "single-module" : ""}`}>
             {active === "Overview" || active === "Tasks" ? <article className="module-card" id="tasks">
               {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Tasks" onClick={() => navigate("Tasks")} /> : null}
-              <CardHeader title="Tasks" detail={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} onOpen={() => navigate("Tasks")} />
+              <CardHeader title="Tasks" detail={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} />
               <div className="thin-progress"><span style={{ width: `${tasks.length ? tasks.filter((task) => task.done).length / tasks.length * 100 : 0}%` }} /></div>
               <div className="rows">
                 {!workspaceLoading && !tasks.length ? <p className="empty-list">No tasks yet. Add the first one.</p> : null}
@@ -462,7 +462,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
 
             {active === "Overview" || active === "Shopping" ? <article className="module-card" id="shopping">
               {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Shopping" onClick={() => navigate("Shopping")} /> : null}
-              <CardHeader title="Shopping" detail={`${shopping.length} items`} onOpen={() => navigate("Shopping")} />
+              <CardHeader title="Shopping" detail={`${shopping.length} items`} />
               {shopping.length > 0 ? <div className="thin-progress lime-progress"><span style={{ width: `${Math.round(shopping.filter((item) => item.done).length / shopping.length * 100)}%` }} /></div> : null}
               <div className="rows">
                 {!workspaceLoading && !shopping.length ? <p className="empty-list">Your shopping list is empty.</p> : null}
@@ -481,7 +481,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
 
             {active === "Overview" || active === "Chat" ? <article className="module-card chat-card" id="chat">
               {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Chat" onClick={() => navigate("Chat")} /> : null}
-              <CardHeader title="Chat" detail={`${messages.length} messages`} onOpen={() => navigate("Chat")} />
+              <CardHeader title="Chat" detail={`${messages.length} messages`} />
               <div className="chat-list live-chat-list">
                 {!messages.length ? <p className="empty-list">No messages yet. Say hello!</p> : null}
                 {filteredMessages.slice(-4).map((message) => (
@@ -498,7 +498,10 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                 {mentionSuggestions.length ? <div className="mention-suggestions">
                   {mentionSuggestions.map((member) => <button type="button" key={member.id} onClick={() => selectMention(member.username)}><i>{member.display_name.slice(0, 2).toUpperCase()}</i><span><strong>{member.display_name}</strong><small>@{member.username}</small></span></button>)}
                 </div> : null}
-                <input name="message" value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} maxLength={2000} placeholder={`Message ${activeGroup.name}`} aria-label="Chat message" autoComplete="off" />
+                <div className="chat-input-wrap">
+                  <input name="message" value={chatDraft} onChange={(event) => setChatDraft(event.target.value)} maxLength={500} placeholder="Write a message… Use @ to mention someone" aria-label="Chat message" autoComplete="off" />
+                  <small className={chatDraft.length >= 450 ? "near-limit" : ""}>{chatDraft.length}/500</small>
+                </div>
                 <button disabled={sendingMessage} aria-label="Send message">↑</button>
               </form>
             </article> : null}
@@ -658,8 +661,8 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   );
 }
 
-function CardHeader({ title, detail, onOpen }: { title: string; detail: string; onOpen: () => void }) {
-  return <header className="card-header"><button className="card-title-link" onClick={onOpen}><h2>{title}</h2><p>{detail}</p></button><button onClick={onOpen}>View all</button></header>;
+function CardHeader({ title, detail }: { title: string; detail: string }) {
+  return <header className="card-header"><div><h2>{title}</h2><p>{detail}</p></div></header>;
 }
 
 function ListPager({ page, pages, setPage }: { page: number; pages: number; setPage: React.Dispatch<React.SetStateAction<number>> }) {
