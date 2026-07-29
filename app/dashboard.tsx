@@ -2,6 +2,7 @@
 
 import {
   Bell,
+  ArrowLeft,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -15,6 +16,7 @@ import {
   Plus,
   Pencil,
   Search,
+  Settings,
   ShoppingCart,
   Sparkles,
   UserPlus,
@@ -74,7 +76,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [editingItem, setEditingItem] = useState<EditableItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EditableItem | null>(null);
   const [categories, setCategories] = useState<ShoppingCategory[]>([]);
-  const [activeCategory, setActiveCategory] = useState("all");
+  const [activeCategory, setActiveCategory] = useState("");
   const [folderManager, setFolderManager] = useState(false);
   const [editingCategory, setEditingCategory] = useState<ShoppingCategory | null>(null);
 
@@ -330,6 +332,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
       return;
     }
     setActive(label);
+    if (label === "Shopping") setActiveCategory("");
     if (label === "Chat") void loadChat(true);
     document.getElementById("dashboard-top")?.scrollIntoView({ behavior: "auto", block: "start" });
   };
@@ -381,7 +384,12 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
 
   const contextualAdd = () => {
     if (active === "Tasks") setEditor("task");
-    else if (active === "Shopping") setEditor("shopping");
+    else if (active === "Shopping") {
+      if (!categories.length) {
+        setFolderManager(true);
+        notify("Create your first folder before adding an item");
+      } else setEditor("shopping");
+    }
     else if (active === "Chat") createInvite();
     else setQuickAdd(true);
   };
@@ -467,11 +475,6 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             <div>
               <p className="eyebrow"><Sparkles /> YOUR SHARED SPACE</p>
               <h1>Good evening, {user.displayName}</h1>
-              <div className="group-line">
-                <button className="group-select members-trigger" onClick={showMembers}>
-                  <Users /> Members <span>{groupMembers.length}</span>
-                </button>
-              </div>
             </div>
             <button className="primary-button" onClick={contextualAdd}>{active === "Tasks" ? "Add task" : active === "Shopping" ? "Add item" : active === "Chat" ? "Invite" : "Add new"} <Plus /></button>
           </section>
@@ -499,14 +502,17 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
 
             {active === "Overview" || active === "Shopping" ? <article className="module-card" id="shopping">
               {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Shopping" onClick={() => navigate("Shopping")} /> : null}
-              <CardHeader title="Shopping" detail={`${shopping.length} items`} />
-              {active === "Shopping" ? <div className="folder-grid">
-                <button className={activeCategory === "all" ? "active" : ""} onClick={() => setActiveCategory("all")}><Folder /><span><strong>All items</strong><small>{shopping.length}</small></span></button>
-                {categories.slice(0, 4).map((category) => <button key={category.id} className={activeCategory === category.id ? "active" : ""} onClick={() => setActiveCategory(category.id)}><Folder /><span><strong>{category.name}</strong><small>{shopping.filter((item) => item.categoryId === category.id).length}</small></span></button>)}
-                <button className="manage-folders" onClick={() => setFolderManager(true)}><Plus /><span><strong>Folders</strong><small>Manage</small></span></button>
+              <div className="shopping-heading">
+                <CardHeader title={activeCategory ? categories.find((category) => category.id === activeCategory)?.name || "Shopping" : "Shopping"} detail={activeCategory ? `${filteredShopping.length} items` : `${categories.length} folders`} />
+                {active === "Shopping" ? <button className="folder-settings-button" onClick={() => setFolderManager(true)} aria-label="Shopping folder settings"><Settings /></button> : null}
+              </div>
+              {(active === "Overview" || !activeCategory) ? <div className="folder-grid folder-browser">
+                {categories.slice(0, active === "Overview" ? 5 : 8).map((category) => <button key={category.id} onClick={() => { if (active === "Shopping") setActiveCategory(category.id); }}><Folder /><span><strong>{category.name}</strong><small>{shopping.filter((item) => item.categoryId === category.id).length} items</small></span></button>)}
+                {!categories.length ? <div className="folder-empty-state"><Folder /><span><strong>No folders yet</strong><small>Create one from Settings</small></span></div> : null}
               </div> : null}
-              {shopping.length > 0 ? <div className="thin-progress lime-progress"><span style={{ width: `${Math.round(shopping.filter((item) => item.done).length / shopping.length * 100)}%` }} /></div> : null}
-              <div className="rows">
+              {active === "Shopping" && activeCategory ? <button className="folder-back-button" onClick={() => setActiveCategory("")}><ArrowLeft /> Back to folders</button> : null}
+              {active === "Shopping" && activeCategory && filteredShopping.length > 0 ? <div className="thin-progress lime-progress"><span style={{ width: `${Math.round(filteredShopping.filter((item) => item.done).length / filteredShopping.length * 100)}%` }} /></div> : null}
+              {active === "Shopping" && activeCategory ? <div className="rows">
                 {!workspaceLoading && !shopping.length ? <p className="empty-list">Your shopping list is empty.</p> : null}
                 {visibleShopping.map((item) => (
                   <div className={`item-row pro-row shopping-pro-row ${item.done ? "completed" : ""}`} key={item.id}>
@@ -516,9 +522,9 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                     <div className="row-actions"><button onClick={() => setEditingItem({ type: "shopping", item })} aria-label="Edit item"><Pencil /></button><button className="danger-action" onClick={() => setDeleteTarget({ type: "shopping", item })} aria-label="Delete item"><Trash2 /></button></div>
                   </div>
                 ))}
-              </div>
-              <ListPager page={Math.min(shoppingPage, shoppingPageCount - 1)} pages={shoppingPageCount} setPage={setShoppingPage} />
-              <button className="add-link lime-text" onClick={() => setEditor("shopping")}><Plus /> Add item</button>
+              </div> : null}
+              {active === "Shopping" && activeCategory ? <ListPager page={Math.min(shoppingPage, shoppingPageCount - 1)} pages={shoppingPageCount} setPage={setShoppingPage} /> : null}
+              {active === "Shopping" ? <button className="add-link lime-text" onClick={contextualAdd}><Plus /> Add item</button> : null}
             </article> : null}
 
             {active === "Overview" || active === "Chat" ? <article className="module-card chat-card" id="chat">
@@ -577,7 +583,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                 <span><strong>Add task</strong><small>Create a shared task</small></span>
                 <b>→</b>
               </button>
-              <button onClick={() => { setQuickAdd(false); setEditor("shopping"); }}>
+              <button onClick={() => { setQuickAdd(false); if (!categories.length) { setFolderManager(true); notify("Create your first folder before adding an item"); } else setEditor("shopping"); }}>
                 <i><ShoppingCart /></i>
                 <span><strong>Add shopping item</strong><small>Add it to the shared list</small></span>
                 <b>→</b>
@@ -626,7 +632,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                 {editor === "task" ? "Task title" : "Item name"}
                 <input name={editor === "task" ? "title" : "name"} maxLength={180} autoFocus placeholder={editor === "task" ? "e.g. Pay the electricity bill" : "e.g. Milk"} required />
               </label>
-              {editor === "task" ? <label>Due date <input type="date" name="dueDate" /></label> : <><label>Quantity <input name="quantity" maxLength={30} placeholder="e.g. 2" /></label><label>Folder<select name="categoryId" defaultValue={activeCategory === "all" ? "" : activeCategory}><option value="">No folder</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></>}
+              {editor === "task" ? <label>Due date <input type="date" name="dueDate" /></label> : <><label>Quantity <input name="quantity" maxLength={30} placeholder="e.g. 2" /></label><label>Folder<select name="categoryId" defaultValue={activeCategory} required><option value="" disabled>Select a folder</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></>}
               <button className="auth-submit">Add to {activeGroup.name} <Plus /></button>
             </form>
           </section>
@@ -643,7 +649,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               {editingItem.type === "task" ? <>
                 <label>Due date<input type="date" name="dueDate" defaultValue={editingItem.item.dueDate} /></label>
                 <label>Assigned to<select name="assignedTo" defaultValue={editingItem.item.assignedTo}><option value="">Unassigned</option>{groupMembers.map((member) => <option value={member.id} key={member.id}>{member.display_name}</option>)}</select></label>
-              </> : <><label>Quantity<input name="quantity" defaultValue={editingItem.item.amount || "1"} maxLength={30} /></label><label>Folder<select name="categoryId" defaultValue={editingItem.item.categoryId}><option value="">No folder</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></>}
+              </> : <><label>Quantity<input name="quantity" defaultValue={editingItem.item.amount || "1"} maxLength={30} /></label><label>Folder<select name="categoryId" defaultValue={editingItem.item.categoryId} required><option value="" disabled>Select a folder</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></>}
               <button className="auth-submit"><Check /> Save changes</button>
             </form>
           </section>
