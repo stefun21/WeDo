@@ -29,7 +29,6 @@ const navItems = [
   { label: "Tasks", icon: ListTodo },
   { label: "Shopping", icon: ShoppingCart },
   { label: "Chat", icon: MessageCircle },
-  { label: "Members", icon: Users },
 ];
 
 type Task = { id: string; title: string; done: boolean; person: string; when: string };
@@ -71,6 +70,19 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
   }, []);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscroll = document.body.style.overscrollBehavior;
+    if (menuOpen) {
+      document.body.style.overflow = "hidden";
+      document.body.style.overscrollBehavior = "none";
+    }
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscroll;
+    };
+  }, [menuOpen]);
 
   useEffect(() => {
     const initialStatus = window.setTimeout(() => setOnline(navigator.onLine), 0);
