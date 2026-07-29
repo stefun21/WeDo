@@ -384,7 +384,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             <div className="overview-heading"><h2>Overview</h2><button><MoreHorizontal /></button></div>
             <div className="metrics">
               <Metric icon={<CheckCircle2 />} color="mint" value={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} progress={tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : 0} />
-              <Metric icon={<ShoppingCart />} color="lime" value={`${shopping.filter((item) => item.done).length} of ${shopping.length} bought`} progress={shopping.length ? Math.round(shopping.filter((item) => item.done).length / shopping.length * 100) : 0} />
+              <Metric icon={<ShoppingCart />} color="lime" value={`${shopping.filter((item) => item.done).length} of ${shopping.length} bought`} progress={shopping.length ? Math.round(shopping.filter((item) => item.done).length / shopping.length * 100) : 0} showProgress={shopping.length > 0} />
               <div className={`metric cyan latest-message ${latestMessage && latestMessage.userId !== user.id && unreadCount > 0 ? "unread" : "read"}`}>
                 <div className="metric-icon"><MessageCircle /></div>
                 <div><strong>{latestMessage ? `${latestMessage.displayName}: ${latestMessage.body}` : "No messages yet"}</strong><small>{latestMessage ? new Date(latestMessage.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Start the conversation"}</small></div>
@@ -416,7 +416,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
 
             {active === "Overview" || active === "Shopping" ? <article className="module-card" id="shopping">
               <CardHeader title="Shopping" detail={`${shopping.length} items`} />
-              <div className="thin-progress lime-progress"><span style={{ width: "72%" }} /></div>
+              {shopping.length > 0 ? <div className="thin-progress lime-progress"><span style={{ width: `${Math.round(shopping.filter((item) => item.done).length / shopping.length * 100)}%` }} /></div> : null}
               <div className="rows">
                 {!workspaceLoading && !shopping.length ? <p className="empty-list">Your shopping list is empty.</p> : null}
                 {filteredShopping.map((item) => (
@@ -554,8 +554,8 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   );
 }
 
-function Metric({ icon, color, value, progress }: { icon: React.ReactNode; color: string; value: string; progress: number }) {
-  return <div className={`metric ${color}`}><div className="metric-icon">{icon}</div><div><strong>{value}</strong><div className="progress"><span style={{ width: `${progress}%` }} /></div></div></div>;
+function Metric({ icon, color, value, progress, showProgress = true }: { icon: React.ReactNode; color: string; value: string; progress: number; showProgress?: boolean }) {
+  return <div className={`metric ${color}`}><div className="metric-icon">{icon}</div><div><strong>{value}</strong>{showProgress ? <div className="progress"><span style={{ width: `${progress}%` }} /></div> : null}</div></div>;
 }
 
 function CardHeader({ title, detail }: { title: string; detail: string }) {

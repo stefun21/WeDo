@@ -1,4 +1,4 @@
-const CACHE = "wedo-shell-v8";
+const CACHE = "wedo-shell-v9";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icon-192.svg", "/icon-512.svg"];
 
 self.addEventListener("install", (event) => {
