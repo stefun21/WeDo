@@ -259,7 +259,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     }
     setActive(label);
     if (label === "Chat") void loadChat(true);
-    document.getElementById("dashboard-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("dashboard-top")?.scrollIntoView({ behavior: "auto", block: "start" });
   };
 
   const showMembers = async () => {
@@ -413,6 +413,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
 
           <section className={`card-grid ${active !== "Overview" ? "single-module" : ""}`}>
             {active === "Overview" || active === "Tasks" ? <article className="module-card" id="tasks">
+              {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Tasks" onClick={() => navigate("Tasks")} /> : null}
               <CardHeader title="Tasks" detail={`${tasks.filter((task) => task.done).length} of ${tasks.length} complete`} onOpen={() => navigate("Tasks")} />
               <div className="thin-progress"><span style={{ width: `${tasks.length ? tasks.filter((task) => task.done).length / tasks.length * 100 : 0}%` }} /></div>
               <div className="rows">
@@ -435,6 +436,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             </article> : null}
 
             {active === "Overview" || active === "Shopping" ? <article className="module-card" id="shopping">
+              {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Shopping" onClick={() => navigate("Shopping")} /> : null}
               <CardHeader title="Shopping" detail={`${shopping.length} items`} onOpen={() => navigate("Shopping")} />
               {shopping.length > 0 ? <div className="thin-progress lime-progress"><span style={{ width: `${Math.round(shopping.filter((item) => item.done).length / shopping.length * 100)}%` }} /></div> : null}
               <div className="rows">
@@ -456,6 +458,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             </article> : null}
 
             {active === "Overview" || active === "Chat" ? <article className="module-card chat-card" id="chat">
+              {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Chat" onClick={() => navigate("Chat")} /> : null}
               <CardHeader title="Chat" detail={`${messages.length} messages`} onOpen={() => navigate("Chat")} />
               <div className="chat-list live-chat-list">
                 {!messages.length ? <p className="empty-list">No messages yet. Say hello!</p> : null}
