@@ -21,6 +21,7 @@ import {
   Users,
   WifiOff,
   Download,
+  Folder,
   Trash2,
   X,
 } from "lucide-react";
@@ -34,7 +35,8 @@ const navItems = [
 ];
 
 type Task = { id: string; title: string; done: boolean; person: string; when: string; dueDate: string; assignedTo: string };
-type ShoppingItem = { id: string; title: string; amount: string; done: boolean };
+type ShoppingItem = { id: string; title: string; amount: string; done: boolean; categoryId: string };
+type ShoppingCategory = { id: string; name: string; color: string };
 type EditableItem = { type: "task"; item: Task } | { type: "shopping"; item: ShoppingItem };
 type Message = { id: string; body: string; createdAt: string; userId: string; displayName: string };
 type Member = { id: string; username: string; display_name: string; role: "owner" | "admin" | "member"; joined_at: string };
@@ -71,6 +73,10 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   const [shoppingPage, setShoppingPage] = useState(0);
   const [editingItem, setEditingItem] = useState<EditableItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<EditableItem | null>(null);
+  const [categories, setCategories] = useState<ShoppingCategory[]>([]);
+  const [activeCategory, setActiveCategory] = useState("all");
+  const [folderManager, setFolderManager] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<ShoppingCategory | null>(null);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -123,16 +129,18 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
         dueDate: task.due_date ? String(task.due_date).slice(0, 10) : "",
         assignedTo: task.assigned_to || "",
       })));
-      setShopping(data.shopping.map((item: { id: string; name: string; quantity?: string; completed: boolean }) => ({
-        id: item.id, title: item.name, amount: item.quantity || "", done: item.completed,
+      setShopping(data.shopping.map((item: { id: string; name: string; quantity?: string; category_id?: string; completed: boolean }) => ({
+        id: item.id, title: item.name, amount: item.quantity || "", done: item.completed, categoryId: item.category_id || "",
       })));
+      setCategories(data.categories || []);
       localStorage.setItem(`wedo-workspace-${activeGroup.id}`, JSON.stringify(data));
     } else {
       const cached = localStorage.getItem(`wedo-workspace-${activeGroup.id}`);
       if (cached) {
         const stored = JSON.parse(cached);
         setTasks(stored.tasks.map((task: { id: string; title: string; completed: boolean; assigned_name?: string; assigned_to?: string; due_date?: string }) => ({ id: task.id, title: task.title, done: task.completed, person: task.assigned_name?.slice(0, 1).toUpperCase() || user.displayName.slice(0, 1).toUpperCase(), when: task.due_date ? new Date(task.due_date).toLocaleDateString() : "", dueDate: task.due_date ? String(task.due_date).slice(0, 10) : "", assignedTo: task.assigned_to || "" })));
-        setShopping(stored.shopping.map((item: { id: string; name: string; quantity?: string; completed: boolean }) => ({ id: item.id, title: item.name, amount: item.quantity || "", done: item.completed })));
+        setShopping(stored.shopping.map((item: { id: string; name: string; quantity?: string; category_id?: string; completed: boolean }) => ({ id: item.id, title: item.name, amount: item.quantity || "", done: item.completed, categoryId: item.category_id || "" })));
+        setCategories(stored.categories || []);
       } else notify("Could not load this group");
     }
     setWorkspaceLoading(false);
@@ -246,7 +254,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     setShopping((all) => all.map((entry) => entry.id === item.id ? { ...entry, amount: quantity } : entry));
     await fetch(`/api/groups/${activeGroup.id}/workspace`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "edit", type: "shopping", itemId: item.id, name: item.title, quantity }),
+      body: JSON.stringify({ action: "edit", type: "shopping", itemId: item.id, name: item.title, quantity, categoryId: item.categoryId }),
     });
   };
 
@@ -256,6 +264,29 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     if (!response.ok) return notify("Could not delete this item");
     setDeleteTarget(null);
     notify(deleteTarget.type === "task" ? "Task deleted" : "Shopping item deleted");
+    void loadWorkspace();
+  };
+
+  const saveCategory = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = String(new FormData(event.currentTarget).get("name") || "").trim();
+    const response = await fetch(`/api/groups/${activeGroup.id}/workspace`, {
+      method: editingCategory ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editingCategory ? { action: "edit", type: "category", itemId: editingCategory.id, name } : { type: "category", name }),
+    });
+    const data = await response.json();
+    if (!response.ok) return notify(data.error || "Could not save folder");
+    setEditingCategory(null);
+    notify(editingCategory ? "Folder renamed" : "Folder created");
+    void loadWorkspace();
+  };
+
+  const deleteCategory = async (category: ShoppingCategory) => {
+    const response = await fetch(`/api/groups/${activeGroup.id}/workspace?type=category&itemId=${category.id}`, { method: "DELETE" });
+    if (!response.ok) return notify("Could not delete folder");
+    if (activeCategory === category.id) setActiveCategory("all");
+    notify("Folder deleted — its items are still safe");
     void loadWorkspace();
   };
 
@@ -333,7 +364,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
   };
 
   const filteredTasks = tasks.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
-  const filteredShopping = shopping.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredShopping = shopping.filter((item) => item.title.toLowerCase().includes(searchQuery.toLowerCase()) && (activeCategory === "all" || item.categoryId === activeCategory));
   const filteredMessages = messages.filter((item) => `${item.displayName} ${item.body}`.toLowerCase().includes(searchQuery.toLowerCase()));
   const taskPageCount = Math.max(1, Math.ceil(filteredTasks.length / 4));
   const shoppingPageCount = Math.max(1, Math.ceil(filteredShopping.length / 4));
@@ -348,12 +379,18 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
     setChatDraft((current) => current.replace(/@([a-zA-Z0-9_-]*)$/, `@${username} `));
   };
 
+  const contextualAdd = () => {
+    if (active === "Tasks") setEditor("task");
+    else if (active === "Shopping") setEditor("shopping");
+    else if (active === "Chat") createInvite();
+    else setQuickAdd(true);
+  };
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${menuOpen ? "sidebar-open" : ""}`}>
         <div className="brand">
-          <div className="brand-mark"><Check /></div>
-          <span>WeDo</span>
+          <button className="brand-home" onClick={() => navigate("Overview")} aria-label="Go to Overview"><span className="brand-mark"><Check /></span><span>WeDo</span></button>
           <button className="mobile-close" onClick={() => setMenuOpen(false)} aria-label="Close menu">
             <X />
           </button>
@@ -436,7 +473,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                 </button>
               </div>
             </div>
-            <button className="primary-button" onClick={() => setQuickAdd(true)}>Add new <Plus /></button>
+            <button className="primary-button" onClick={contextualAdd}>{active === "Tasks" ? "Add task" : active === "Shopping" ? "Add item" : active === "Chat" ? "Invite" : "Add new"} <Plus /></button>
           </section>
 
           <section className={`card-grid ${active !== "Overview" ? "single-module" : ""}`}>
@@ -463,6 +500,11 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
             {active === "Overview" || active === "Shopping" ? <article className="module-card" id="shopping">
               {active === "Overview" ? <button className="module-card-hitbox" aria-label="Open Shopping" onClick={() => navigate("Shopping")} /> : null}
               <CardHeader title="Shopping" detail={`${shopping.length} items`} />
+              {active === "Shopping" ? <div className="folder-grid">
+                <button className={activeCategory === "all" ? "active" : ""} onClick={() => setActiveCategory("all")}><Folder /><span><strong>All items</strong><small>{shopping.length}</small></span></button>
+                {categories.slice(0, 4).map((category) => <button key={category.id} className={activeCategory === category.id ? "active" : ""} onClick={() => setActiveCategory(category.id)}><Folder /><span><strong>{category.name}</strong><small>{shopping.filter((item) => item.categoryId === category.id).length}</small></span></button>)}
+                <button className="manage-folders" onClick={() => setFolderManager(true)}><Plus /><span><strong>Folders</strong><small>Manage</small></span></button>
+              </div> : null}
               {shopping.length > 0 ? <div className="thin-progress lime-progress"><span style={{ width: `${Math.round(shopping.filter((item) => item.done).length / shopping.length * 100)}%` }} /></div> : null}
               <div className="rows">
                 {!workspaceLoading && !shopping.length ? <p className="empty-list">Your shopping list is empty.</p> : null}
@@ -584,7 +626,7 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                 {editor === "task" ? "Task title" : "Item name"}
                 <input name={editor === "task" ? "title" : "name"} maxLength={180} autoFocus placeholder={editor === "task" ? "e.g. Pay the electricity bill" : "e.g. Milk"} required />
               </label>
-              {editor === "task" ? <label>Due date <input type="date" name="dueDate" /></label> : <label>Quantity <input name="quantity" maxLength={30} placeholder="e.g. 2 or 1 kg" /></label>}
+              {editor === "task" ? <label>Due date <input type="date" name="dueDate" /></label> : <><label>Quantity <input name="quantity" maxLength={30} placeholder="e.g. 2" /></label><label>Folder<select name="categoryId" defaultValue={activeCategory === "all" ? "" : activeCategory}><option value="">No folder</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></>}
               <button className="auth-submit">Add to {activeGroup.name} <Plus /></button>
             </form>
           </section>
@@ -601,9 +643,26 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
               {editingItem.type === "task" ? <>
                 <label>Due date<input type="date" name="dueDate" defaultValue={editingItem.item.dueDate} /></label>
                 <label>Assigned to<select name="assignedTo" defaultValue={editingItem.item.assignedTo}><option value="">Unassigned</option>{groupMembers.map((member) => <option value={member.id} key={member.id}>{member.display_name}</option>)}</select></label>
-              </> : <label>Quantity<input name="quantity" defaultValue={editingItem.item.amount || "1"} maxLength={30} /></label>}
+              </> : <><label>Quantity<input name="quantity" defaultValue={editingItem.item.amount || "1"} maxLength={30} /></label><label>Folder<select name="categoryId" defaultValue={editingItem.item.categoryId}><option value="">No folder</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label></>}
               <button className="auth-submit"><Check /> Save changes</button>
             </form>
+          </section>
+        </div>
+      ) : null}
+      {folderManager ? (
+        <div className="invite-modal-backdrop" onClick={() => { setFolderManager(false); setEditingCategory(null); }}>
+          <section className="invite-modal folder-manager-modal" onClick={(event) => event.stopPropagation()}>
+            <button className="modal-close" onClick={() => { setFolderManager(false); setEditingCategory(null); }}><X /></button>
+            <p className="auth-kicker">SHOPPING FOLDERS</p>
+            <h2>Organize your list</h2>
+            <p>Create personal folders for food, home, work or anything else.</p>
+            <form className="folder-form" onSubmit={saveCategory}>
+              <input name="name" key={editingCategory?.id || "new"} defaultValue={editingCategory?.name || ""} maxLength={40} placeholder="Folder name" required />
+              <button>{editingCategory ? "Save" : "Create"} <Plus /></button>
+            </form>
+            <div className="folder-manager-list">
+              {!categories.length ? <p className="empty-list">No folders yet. Create your first one.</p> : categories.map((category) => <div key={category.id}><Folder /><span><strong>{category.name}</strong><small>{shopping.filter((item) => item.categoryId === category.id).length} items</small></span><button onClick={() => setEditingCategory(category)} aria-label={`Rename ${category.name}`}><Pencil /></button><button className="danger-action" onClick={() => deleteCategory(category)} aria-label={`Delete ${category.name}`}><Trash2 /></button></div>)}
+            </div>
           </section>
         </div>
       ) : null}

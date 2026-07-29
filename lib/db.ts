@@ -67,6 +67,17 @@ export async function ensureSchema() {
     )
   `;
   await query`
+    CREATE TABLE IF NOT EXISTS shopping_categories (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+      name VARCHAR(40) NOT NULL,
+      color VARCHAR(12) NOT NULL DEFAULT 'lime',
+      created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await query`
     CREATE TABLE IF NOT EXISTS shopping_items (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       group_id UUID NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -74,10 +85,12 @@ export async function ensureSchema() {
       quantity VARCHAR(30),
       completed BOOLEAN NOT NULL DEFAULT FALSE,
       created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      category_id UUID REFERENCES shopping_categories(id) ON DELETE SET NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
+  await query`ALTER TABLE shopping_items ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES shopping_categories(id) ON DELETE SET NULL`;
   await query`
     CREATE TABLE IF NOT EXISTS messages (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

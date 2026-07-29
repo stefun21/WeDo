@@ -15,7 +15,7 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
   const { id } = await context.params;
   if (!(await access(id, user.id))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const query = sql();
-  const [tasks, shopping] = await Promise.all([
+  const [tasks, shopping, categories] = await Promise.all([
     query`
       SELECT t.id, t.title, t.completed, t.due_date, t.assigned_to,
              COALESCE(u.display_name, '') AS assigned_name
@@ -23,12 +23,13 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
       WHERE t.group_id = ${id} ORDER BY t.completed, t.created_at DESC
     `,
     query`
-      SELECT id, name, quantity, completed
+      SELECT id, name, quantity, completed, category_id
       FROM shopping_items WHERE group_id = ${id}
       ORDER BY completed, created_at DESC
     `,
+    query`SELECT id, name, color FROM shopping_categories WHERE group_id = ${id} ORDER BY created_at`,
   ]);
-  return NextResponse.json({ tasks, shopping });
+  return NextResponse.json({ tasks, shopping, categories });
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -52,10 +53,17 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const name = String(body.name || "").trim();
     const quantity = String(body.quantity || "").trim().slice(0, 30) || null;
     if (!name || name.length > 180) return NextResponse.json({ error: "Item name must contain 1–180 characters." }, { status: 400 });
+    const categoryId = body.categoryId ? String(body.categoryId) : null;
     const rows = await query`
-      INSERT INTO shopping_items (group_id, name, quantity, created_by)
-      VALUES (${id}, ${name}, ${quantity}, ${user.id}) RETURNING id
+      INSERT INTO shopping_items (group_id, name, quantity, created_by, category_id)
+      VALUES (${id}, ${name}, ${quantity}, ${user.id}, ${categoryId}) RETURNING id
     `;
+    return NextResponse.json({ ok: true, id: rows[0].id }, { status: 201 });
+  }
+  if (body.type === "category") {
+    const name = String(body.name || "").trim();
+    if (!name || name.length > 40) return NextResponse.json({ error: "Folder name must contain 1–40 characters." }, { status: 400 });
+    const rows = await query`INSERT INTO shopping_categories (group_id, name, created_by) VALUES (${id}, ${name}, ${user.id}) RETURNING id`;
     return NextResponse.json({ ok: true, id: rows[0].id }, { status: 201 });
   }
   return NextResponse.json({ error: "Invalid item type." }, { status: 400 });
@@ -79,7 +87,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const name = String(body.name || "").trim();
     const quantity = String(body.quantity || "").trim().slice(0, 30) || null;
     if (!name || name.length > 180) return NextResponse.json({ error: "Item name must contain 1–180 characters." }, { status: 400 });
-    await query`UPDATE shopping_items SET name = ${name}, quantity = ${quantity}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
+    const categoryId = body.categoryId ? String(body.categoryId) : null;
+    await query`UPDATE shopping_items SET name = ${name}, quantity = ${quantity}, category_id = ${categoryId}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
+  } else if (body.action === "edit" && body.type === "category") {
+    const name = String(body.name || "").trim();
+    if (!name || name.length > 40) return NextResponse.json({ error: "Folder name must contain 1–40 characters." }, { status: 400 });
+    await query`UPDATE shopping_categories SET name = ${name}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
   } else if (body.type === "task") await query`UPDATE tasks SET completed = ${Boolean(body.completed)}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
   else if (body.type === "shopping") await query`UPDATE shopping_items SET completed = ${Boolean(body.completed)}, updated_at = NOW() WHERE id = ${itemId} AND group_id = ${id}`;
   else return NextResponse.json({ error: "Invalid item type." }, { status: 400 });
@@ -97,6 +110,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const query = sql();
   if (type === "task") await query`DELETE FROM tasks WHERE id = ${itemId} AND group_id = ${id}`;
   else if (type === "shopping") await query`DELETE FROM shopping_items WHERE id = ${itemId} AND group_id = ${id}`;
+  else if (type === "category") await query`DELETE FROM shopping_categories WHERE id = ${itemId} AND group_id = ${id}`;
   else return NextResponse.json({ error: "Invalid item type." }, { status: 400 });
   return NextResponse.json({ ok: true });
 }
