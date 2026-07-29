@@ -3,6 +3,7 @@
 import {
   Bell,
   ArrowLeft,
+  ArrowRight,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -644,7 +645,8 @@ export default function Dashboard({ user, groups }: { user: { id: string; userna
                 {active === "Shopping" ? <button className="folder-settings-button" onClick={() => setFolderManager(true)} aria-label="Shopping folder settings"><Settings /></button> : null}
               </div>
               {(active === "Overview" || !activeCategory) ? <div className="folder-grid folder-browser">
-                {categories.slice(0, active === "Overview" ? 5 : 8).map((category) => <button key={category.id} onClick={() => { if (active === "Shopping") setActiveCategory(category.id); }}><Folder /><span><strong>{category.name}</strong><small>{shopping.filter((item) => item.categoryId === category.id).length} items</small></span></button>)}
+                {categories.slice(0, active === "Overview" && categories.length > 8 ? 8 : active === "Overview" ? 9 : 8).map((category) => <button key={category.id} title={category.name} onClick={() => { if (active === "Overview") { void navigate("Shopping"); setActiveCategory(category.id); } else setActiveCategory(category.id); }}><Folder /><span><strong>{category.name}</strong><small>{shopping.filter((item) => item.categoryId === category.id).length} items</small></span></button>)}
+                {active === "Overview" && categories.length > 8 ? <button className="more-folders" onClick={() => void navigate("Shopping")} aria-label={`Open ${categories.length - 8} more shopping folders`}><ArrowRight /><span><strong>More</strong><small>+{categories.length - 8} folders</small></span></button> : null}
                 {!categories.length ? <div className="folder-empty-state"><Folder /><span><strong>No folders yet</strong><small>Create one from Settings</small></span></div> : null}
               </div> : null}
               {active === "Shopping" && activeCategory ? <button className="folder-back-button" onClick={() => setActiveCategory("")}><ArrowLeft /> Back to folders</button> : null}
